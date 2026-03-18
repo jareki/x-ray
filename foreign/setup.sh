@@ -13,6 +13,7 @@ CERT_RENEW_DAYS="14"
 ACME_HOME="/root/.acme.sh"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TEMPLATES_DIR="$SCRIPT_DIR/templates"
+COMMON_DIR="$SCRIPT_DIR/../common"
 STUB_DIR="/var/www/stub"
 CERT_DIR="/etc/ssl/xray"
 XRAY_DIR="/etc/xray"
@@ -141,7 +142,8 @@ install_acme() {
 # Установка всех зависимостей
 install_dependencies() {
     info "Проверка и установка зависимостей..."
-    [[ -d "$TEMPLATES_DIR" ]] || die "Папка templates не найдена ($TEMPLATES_DIR)"
+    [[ -d "$TEMPLATES_DIR" ]] || die "Папка foreign/templates не найдена ($TEMPLATES_DIR)"
+    [[ -d "$COMMON_DIR" ]]    || die "Папка common не найдена ($COMMON_DIR)"
     install_packages
     install_xray
     install_caddy
@@ -278,20 +280,20 @@ write_stub_site() {
     fi
 }
 
-# Настройка fail2ban
+# Настройка fail2ban (из common)
 write_fail2ban() {
     info "Настройка fail2ban..."
-    cp "$TEMPLATES_DIR/jail.local" /etc/fail2ban/jail.local
+    cp "$COMMON_DIR/jail.local" /etc/fail2ban/jail.local
     chmod 644 /etc/fail2ban/jail.local
     systemctl enable --now fail2ban 2>/dev/null || true
     systemctl restart fail2ban 2>/dev/null || true
     success "fail2ban настроен"
 }
 
-# Настройка logrotate для логов Xray
+# Настройка logrotate для логов Xray (из common)
 write_logrotate() {
     info "Настройка logrotate для Xray..."
-    render_template "$TEMPLATES_DIR/xray.logrotate" "/etc/logrotate.d/xray"
+    render_template "$COMMON_DIR/xray.logrotate" "/etc/logrotate.d/xray"
     chmod 644 /etc/logrotate.d/xray
     success "logrotate конфиг записан"
 }
@@ -323,7 +325,7 @@ restart_services() {
 print_summary() {
     echo ""
     echo -e "${GREEN}========================================${NC}"
-    echo -e "${GREEN}  Установка завершена успешно${NC}"
+    echo -e "${GREEN}  Foreign VPS — установка завершена${NC}"
     echo -e "${GREEN}========================================${NC}"
     echo ""
     echo -e "  UUID клиента:  ${CYAN}$UUID${NC}"

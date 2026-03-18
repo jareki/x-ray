@@ -1,8 +1,40 @@
 # xray-setup
 
-Автоматическая настройка Xray (VLESS + XTLS-Vision + REALITY) и Caddy.
+Автоматическая настройка Xray (VLESS + XTLS-Vision + REALITY) для двух сценариев:
+- **Foreign VPS** — заграничный сервер с Caddy и сайтом-заглушкой
+- **Bridge VPS** — промежуточный мост с раздельной маршрутизацией (RU напрямую, остальное через foreign)
 
-## Архитектура
+## Структура репозитория
+
+```
+x-ray/
+├── common/                         # Общие шаблоны
+│   ├── jail.local                  # Конфиг fail2ban
+│   └── xray.logrotate              # Ротация логов Xray
+├── foreign/                        # Заграничный VPS
+│   ├── setup.sh                    # Скрипт установки
+│   └── templates/
+│       ├── xray-config.json        # Конфиг Xray (VLESS + REALITY)
+│       ├── Caddyfile               # Конфиг Caddy (HTTPS + HTTP + редирект)
+│       ├── cert-renew.sh           # Принудительное обновление сертификата
+│       ├── cert-check.sh           # Проверка срока + вызов cert-renew.sh
+│       ├── xray-cert.cron          # Cron задача (ежедневная проверка в 03:00)
+│       └── index.html              # Сайт-заглушка по умолчанию
+├── bridge/                         # Промежуточный мост (RU VPS)
+│   ├── setup.sh                    # Скрипт установки
+│   └── templates/
+│       └── xray-config.json        # Конфиг Xray (split-routing)
+└── README.md
+```
+
+Шаблоны содержат плейсхолдеры вида `{{ПЕРЕМЕННАЯ}}`. Скрипты подставляют
+значения через `sed` при установке.
+
+---
+
+## Foreign VPS (заграничный сервер)
+
+### Архитектура
 
 ```
 :443  (Xray REALITY)
@@ -14,59 +46,20 @@
 ```
 
 Xray принимает все входящие соединения на порту 443 с протоколом REALITY.
-Авторизованные VLESS-клиенты (с правильным публичным ключом и Short ID)
-проксируются в интернет. Неавторизованные соединения (цензоры, сканеры)
-перенаправляются на Caddy с валидным Let's Encrypt сертификатом — они видят
-обычный HTTPS-сайт. Порт 80 отдаёт редирект на HTTPS для полноты маскировки.
+Авторизованные VLESS-клиенты проксируются в интернет. Неавторизованные
+соединения перенаправляются на Caddy с валидным Let's Encrypt сертификатом.
 
-## Структура репозитория
+### Подготовка
 
-```
-x-ray/
-├── setup.sh              # Главный скрипт установки
-├── README.md
-└── templates/
-    ├── xray-config.json    # Конфиг Xray (VLESS + REALITY)
-    ├── Caddyfile           # Конфиг Caddy (HTTPS + HTTP + редирект)
-    ├── cert-renew.sh       # Принудительное обновление сертификата
-    ├── cert-check.sh       # Проверка срока + вызов cert-renew.sh
-    ├── xray-cert.cron      # Cron задача (ежедневная проверка в 03:00)
-    ├── xray.logrotate      # Ротация логов Xray (устанавливается в /etc/logrotate.d/)
-    ├── jail.local          # Конфиг fail2ban
-    └── index.html          # Сайт-заглушка по умолчанию
-```
+1. **DNS** — A-запись домена должна указывать на IP foreign VPS
+2. **Порты** — 80 и 443 должны быть свободны
+3. **Сайт-заглушка** (опционально) — разместите файлы в `/var/www/stub/` до запуска
 
-Шаблоны содержат плейсхолдеры вида `{{ПЕРЕМЕННАЯ}}`. Скрипт подставляет
-значения через `sed` при установке.
+> Минимальный размер страницы желательно более 32 КБ.
 
-## Подготовка
+### Настройка
 
-### 1. DNS
-
-Перед запуском убедитесь, что A-запись домена указывает на IP сервера:
-
-```bash
-dig +short your-domain.com
-# должен вернуть IP вашего VPS
-```
-
-### 2. Порты
-
-Порты 80 и 443 должны быть свободны до запуска скрипта (не заняты nginx, apache и т.д.).
-
-### 3. Сайт-заглушка (опционально)
-
-Если хотите использовать свою страницу — разместите файлы в `/var/www/stub/`
-до запуска скрипта. Если каталог пуст, скрипт скопирует заглушку из `templates/index.html`.
-
-> Минимальный размер страницы желательно более 32 КБ, чтобы пройти фильтры
-> по объёму передаваемого содержимого.
-
----
-
-## Настройка
-
-Откройте `setup.sh` и заполните блок настроек в начале файла:
+Откройте `foreign/setup.sh` и заполните блок настроек:
 
 ```bash
 DOMAIN="your-domain.com"       # ваш домен
@@ -76,45 +69,22 @@ CADDY_HTTP_PORT="8080"         # порт Caddy без TLS (для VLESS fallbac
 CERT_RENEW_DAYS="14"           # обновлять сертификат за N дней до истечения
 ```
 
----
-
-## Установка
+### Установка
 
 ```bash
-chmod +x setup.sh
-sudo ./setup.sh
+chmod +x foreign/setup.sh
+sudo foreign/setup.sh
 ```
 
-Скрипт выполняет следующие шаги:
-
-1. Проверяет настройки (DOMAIN/EMAIL не должны быть плейсхолдерами)
-2. Устанавливает зависимости (curl, openssl, cron, ufw, fail2ban, Xray, Caddy, acme.sh)
-3. Настраивает firewall (ufw: 22, 80, 443)
-4. Проверяет что DNS-запись домена разрешается
-5. Выпускает TLS-сертификат через acme.sh (Let's Encrypt)
-6. Устанавливает скрипты обновления сертификата и cron задачу
-7. Копирует сайт-заглушку (если отсутствует)
-8. Разворачивает Caddyfile из шаблона (HTTPS + HTTP + редирект на :80)
-9. Генерирует конфиг Xray с REALITY (при повторном запуске — сохраняет UUID, ключи и Short ID)
-10. Устанавливает logrotate конфиг для логов Xray
-11. Настраивает fail2ban (jail.local)
-12. Создаёт systemd override для автоперезапуска Xray при падении
-13. Перезапускает Caddy и Xray
-14. Выводит UUID, Public Key, Short ID и строку подключения для клиента
-
----
-
-## После установки
+### После установки
 
 Данные для подключения выводятся в конце установки и хранятся в `/etc/xray/config.json`.
-
-Получить UUID повторно:
 
 ```bash
 grep '"id"' /etc/xray/config.json
 ```
 
-Строка подключения для клиента (REALITY):
+Строка подключения:
 
 ```
 vless://UUID@your-domain.com:443?security=reality&encryption=none&flow=xtls-rprx-vision&type=tcp&sni=your-domain.com&fp=firefox&pbk=PUBLIC_KEY&sid=SHORT_ID#your-domain.com
@@ -127,53 +97,104 @@ vless://UUID@your-domain.com:443?security=reality&encryption=none&flow=xtls-rprx
 | 443 | Xray | VLESS + REALITY — основной вход |
 | 8443 | Caddy (HTTPS) | REALITY dest — сайт с LE-сертификатом для маскировки |
 | 8080 | Caddy (HTTP) | VLESS fallbacks — расшифрованный трафик |
-| 80 | Caddy | Редирект HTTP → HTTPS |
+| 80 | Caddy | Редирект HTTP -> HTTPS |
 
 ### Логи
 
 ```bash
-# Xray
 tail -f /var/log/xray/error.log
 tail -f /var/log/xray/access.log
-
-# Caddy (сайт-заглушка)
 tail -f /var/log/caddy/stub.log
-
-# Обновление сертификата
 tail -f /var/log/xray/cert-renew.log
-```
-
-### fail2ban
-
-```bash
-# Общий статус
-fail2ban-client status
-
-# Статус jail SSH
-fail2ban-client status sshd
-
-# Разблокировать IP вручную
-fail2ban-client set sshd unbanip 1.2.3.4
-
-# Логи
-tail -f /var/log/fail2ban.log
 ```
 
 ### Ручное обновление сертификата
 
 ```bash
 sudo /etc/xray/cert-renew.sh
-```
-
-### Проверка срока сертификата
-
-```bash
 sudo /etc/xray/cert-check.sh
 ```
 
 ---
 
-## Обновление конфигурации
+## Bridge VPS (промежуточный мост)
+
+Промежуточный сервер с раздельной маршрутизацией:
+российский трафик идёт напрямую, заграничный — через foreign VPS.
+
+### Архитектура
+
+```
+Клиент → Bridge VPS (RU) :443 (VLESS + REALITY, SNI = внешний сайт)
+           ├── geosite:category-ru / geoip:ru → напрямую в интернет
+           ├── всё остальное → Foreign VPS :443 (VLESS + XTLS-Vision + REALITY)
+           └── сканер/цензор → видит TLS-хендшейк с реальным внешним сайтом
+```
+
+REALITY на bridge использует внешний сайт (например, `www.ya.ru`)
+в качестве dest/SNI. Caddy и сертификаты на bridge не нужны.
+
+### Порядок развёртывания
+
+1. **Сначала** — разверните foreign VPS по инструкции выше
+2. Запишите из вывода foreign setup: UUID, Public Key, Short ID
+3. На bridge VPS — откройте `bridge/setup.sh` и заполните:
+
+```bash
+# IP или домен bridge-сервера (для строки подключения клиента)
+BRIDGE_ADDRESS="123.45.67.89"
+
+# Внешний сайт для маскировки REALITY (TLS 1.3, H2)
+REALITY_SNI="www.ya.ru"
+
+# Данные foreign VPS (из вывода foreign/setup.sh)
+FOREIGN_ADDRESS="your-foreign-domain.com"
+FOREIGN_UUID="uuid-from-foreign-vps"
+FOREIGN_PUBLIC_KEY="public-key-from-foreign-vps"
+FOREIGN_SHORT_ID="short-id-from-foreign-vps"
+FOREIGN_SNI="your-foreign-domain.com"
+```
+
+4. Запустите:
+
+```bash
+chmod +x bridge/setup.sh
+sudo bridge/setup.sh
+```
+
+### Маршрутизация
+
+| Трафик | Направление |
+|--------|-------------|
+| Российские домены и IP (geosite:category-ru, geoip:ru) | Напрямую с bridge |
+| Реклама (geosite:category-ads-all) | Блокируется |
+| BitTorrent | Блокируется |
+| Приватные IP-адреса | Блокируется |
+| Всё остальное | Через foreign VPS |
+
+### Клиентское подключение
+
+Клиент подключается к **bridge VPS**. SNI в строке подключения —
+внешний сайт (REALITY_SNI), не адрес bridge:
+
+```
+vless://UUID@BRIDGE_IP:443?security=reality&encryption=none&flow=xtls-rprx-vision&type=tcp&sni=www.ya.ru&fp=firefox&pbk=BRIDGE_PUBLIC_KEY&sid=BRIDGE_SHORT_ID#bridge
+```
+
+---
+
+## Общее
+
+### fail2ban
+
+```bash
+fail2ban-client status
+fail2ban-client status sshd
+fail2ban-client set sshd unbanip 1.2.3.4
+tail -f /var/log/fail2ban.log
+```
+
+### Обновление конфигурации
 
 После изменения переменных в `setup.sh` или шаблонов в `templates/`
 достаточно запустить скрипт повторно — он перезапишет все конфиги и

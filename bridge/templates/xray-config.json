@@ -1,0 +1,131 @@
+{
+  "log": {
+    "loglevel": "warning",
+    "access": "{{LOG_DIR_XRAY}}/access.log",
+    "error": "{{LOG_DIR_XRAY}}/error.log"
+  },
+  "dns": {
+    "servers": [
+      {
+        "address": "1.1.1.1",
+        "domains": ["geosite:geolocation-!ru"]
+      },
+      {
+        "address": "https://dns.google/dns-query",
+        "domains": ["geosite:geolocation-!ru"]
+      },
+      "77.88.8.8",
+      "77.88.8.1"
+    ]
+  },
+  "inbounds": [
+    {
+      "port": 443,
+      "protocol": "vless",
+      "settings": {
+        "clients": [
+          {
+            "id": "{{UUID}}",
+            "flow": "xtls-rprx-vision",
+            "email": "user@bridge"
+          }
+        ],
+        "decryption": "none"
+      },
+      "streamSettings": {
+        "network": "raw",
+        "security": "reality",
+        "realitySettings": {
+          "show": false,
+          "dest": "{{REALITY_SNI}}:443",
+          "serverNames": ["{{REALITY_SNI}}"],
+          "privateKey": "{{PRIVATE_KEY}}",
+          "shortIds": ["", "{{SHORT_ID}}"],
+          "maxTimeDiff": 60000
+        }
+      },
+      "sniffing": {
+        "enabled": true,
+        "destOverride": ["http", "tls"],
+        "routeOnly": true
+      }
+    }
+  ],
+  "outbounds": [
+    {
+      "protocol": "vless",
+      "tag": "proxy",
+      "settings": {
+        "vnext": [
+          {
+            "address": "{{FOREIGN_ADDRESS}}",
+            "port": 443,
+            "users": [
+              {
+                "id": "{{FOREIGN_UUID}}",
+                "flow": "xtls-rprx-vision",
+                "encryption": "none"
+              }
+            ]
+          }
+        ]
+      },
+      "streamSettings": {
+        "network": "raw",
+        "security": "reality",
+        "realitySettings": {
+          "serverName": "{{FOREIGN_SNI}}",
+          "fingerprint": "firefox",
+          "publicKey": "{{FOREIGN_PUBLIC_KEY}}",
+          "shortId": "{{FOREIGN_SHORT_ID}}"
+        }
+      }
+    },
+    {
+      "protocol": "freedom",
+      "tag": "direct",
+      "settings": { "domainStrategy": "UseIPv4v6" }
+    },
+    {
+      "protocol": "blackhole",
+      "tag": "block"
+    }
+  ],
+  "routing": {
+    "domainStrategy": "IPIfNonMatch",
+    "rules": [
+      {
+        "type": "field",
+        "domain": ["geosite:category-ads-all"],
+        "outboundTag": "block"
+      },
+      {
+        "type": "field",
+        "protocol": ["bittorrent"],
+        "outboundTag": "block"
+      },
+      {
+        "type": "field",
+        "ip": ["geoip:private"],
+        "outboundTag": "block"
+      },
+      {
+        "type": "field",
+        "domain": [
+          "geosite:category-ru"
+        ],
+        "outboundTag": "direct"
+      },
+      {
+        "type": "field",
+        "ip": ["geoip:ru"],
+        "outboundTag": "direct"
+      },
+      {
+        "type": "field",
+        "network": "tcp,udp",
+        "outboundTag": "proxy"
+      }
+    ]
+  }
+}
