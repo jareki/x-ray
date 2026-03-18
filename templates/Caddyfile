@@ -1,30 +1,50 @@
-127.0.0.1:{{CADDY_PORT}} {
-    # Корневая директория сайта-заглушки
+# HTTPS — для REALITY dest (с LE-сертификатом от acme.sh)
+{{DOMAIN}}:{{CADDY_HTTPS_PORT}} {
+    bind 127.0.0.1
+    tls {{CERT_DIR}}/fullchain.pem {{CERT_DIR}}/key.pem
     root * {{STUB_DIR}}
-    # Отдаём статические файлы
     file_server
-
-    # Сжатие ответов
     encode gzip zstd
 
     header {
-        # Убираем заголовок Caddy, чтобы не выдавать бэкенд
         -Server
-        # Запрещаем браузеру угадывать MIME-тип — защита от XSS
         X-Content-Type-Options "nosniff"
-        # Запрещаем встраивать страницу в iframe
         X-Frame-Options "SAMEORIGIN"
-        # Убираем заголовок с версией бэкенда, если появится
         -X-Powered-By
     }
 
     log {
         output file {{LOG_DIR_CADDY}}/stub.log {
-            # Ротация: новый файл после 10 МБ
             roll_size 10mb
-            # Хранить не более 5 файлов истории
             roll_keep 5
         }
         format json
     }
+}
+
+# Plain HTTP — для VLESS fallbacks (трафик уже расшифрован Xray)
+127.0.0.1:{{CADDY_HTTP_PORT}} {
+    root * {{STUB_DIR}}
+    file_server
+    encode gzip zstd
+
+    header {
+        -Server
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "SAMEORIGIN"
+        -X-Powered-By
+    }
+
+    log {
+        output file {{LOG_DIR_CADDY}}/stub.log {
+            roll_size 10mb
+            roll_keep 5
+        }
+        format json
+    }
+}
+
+# HTTP :80 — редирект на HTTPS (маскировка под обычный сайт)
+http://{{DOMAIN}} {
+    redir https://{{DOMAIN}}{uri} permanent
 }

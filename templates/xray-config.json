@@ -22,7 +22,7 @@
         "decryption": "none",
         "fallbacks": [
           {
-            "dest": {{CADDY_PORT}}
+            "dest": {{CADDY_HTTP_PORT}}
           }
         ]
       },
@@ -31,14 +31,11 @@
         "security": "reality",
         "realitySettings": {
           "show": false,
-          "target": "{{CADDY_PORT}}",
+          "dest": "127.0.0.1:{{CADDY_HTTPS_PORT}}",
           "serverNames": ["{{DOMAIN}}", "www.{{DOMAIN}}"],
           "privateKey": "{{PRIVATE_KEY}}",
-          "shortIds": ["", "{{SHORT_ID}}"],          
-          "fingerprint": "firefox",
-          "serverName": "{{DOMAIN}}",
-          "password": "{{PUBLIC_KEY}}",
-          "shortId": "{{SHORT_ID}}"
+          "shortIds": ["", "{{SHORT_ID}}"],
+          "maxTimeDiff": 60000
         }
       },
       "sniffing": {
@@ -62,6 +59,14 @@
   "routing": {
     "domainStrategy": "IPIfNonMatch",
     "rules": [
+      {
+        "type": "field",
+        "domain": [
+          "geosite:category-ads-all",
+          "geosite:category-ru"
+        ],
+        "outboundTag": "block"
+      },
       {
         "type": "field",
         "ip": ["geoip:private", "geoip:ru"],

@@ -21,6 +21,9 @@ trap cleanup EXIT
 
 echo "$LOG_PREFIX Renewing certificate for {{DOMAIN}}..."
 
+# Останавливаем Caddy — он занимает порт 80 (редирект)
+systemctl stop caddy 2>/dev/null || true
+
 {{ACME_HOME}}/acme.sh --renew \
     --domain "{{DOMAIN}}" \
     --standalone \
@@ -31,6 +34,9 @@ echo "$LOG_PREFIX Renewing certificate for {{DOMAIN}}..."
     --cert-file      "{{CERT_DIR}}/cert.pem" \
     --key-file       "{{CERT_DIR}}/key.pem" \
     --fullchain-file "{{CERT_DIR}}/fullchain.pem" \
-    --reloadcmd      "systemctl restart xray"
+    --reloadcmd      "systemctl restart xray && systemctl restart caddy"
+
+# Запускаем Caddy обратно
+systemctl start caddy 2>/dev/null || true
 
 echo "$LOG_PREFIX Certificate renewed successfully."

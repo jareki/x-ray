@@ -5,7 +5,8 @@ set -euo pipefail
 # НАСТРОЙКИ
 DOMAIN="your-domain.com"
 EMAIL="your@email.com"
-CADDY_PORT="9443"
+CADDY_HTTPS_PORT="8443"
+CADDY_HTTP_PORT="8080"
 CERT_RENEW_DAYS="14"
 
 # ПУТИ
@@ -35,7 +36,8 @@ render_template() {
     sed \
         -e "s|{{DOMAIN}}|$DOMAIN|g" \
         -e "s|{{EMAIL}}|$EMAIL|g" \
-        -e "s|{{CADDY_PORT}}|$CADDY_PORT|g" \
+        -e "s|{{CADDY_HTTPS_PORT}}|$CADDY_HTTPS_PORT|g" \
+        -e "s|{{CADDY_HTTP_PORT}}|$CADDY_HTTP_PORT|g" \
         -e "s|{{CERT_RENEW_DAYS}}|$CERT_RENEW_DAYS|g" \
         -e "s|{{STUB_DIR}}|$STUB_DIR|g" \
         -e "s|{{CERT_DIR}}|$CERT_DIR|g" \
@@ -46,6 +48,9 @@ render_template() {
         -e "s|{{CERT_CHECK_SCRIPT}}|$CERT_CHECK_SCRIPT|g" \
         -e "s|{{ACME_HOME}}|$ACME_HOME|g" \
         -e "s|{{UUID}}|$UUID|g" \
+        -e "s|{{PRIVATE_KEY}}|$PRIVATE_KEY|g" \
+        -e "s|{{PUBLIC_KEY}}|$PUBLIC_KEY|g" \
+        -e "s|{{SHORT_ID}}|$SHORT_ID|g" \
         "$src" > "$dst"
 }
 
@@ -189,7 +194,7 @@ issue_certificate() {
         --cert-file      "$CERT_DIR/cert.pem" \
         --key-file       "$CERT_DIR/key.pem" \
         --fullchain-file "$CERT_DIR/fullchain.pem" \
-        --reloadcmd      "systemctl restart xray"
+        --reloadcmd      "systemctl restart xray && systemctl restart caddy"
 
     chmod 600 "$CERT_DIR"/*.pem
     success "Сертификат установлен в $CERT_DIR"
@@ -227,9 +232,35 @@ write_xray_config() {
         UUID=$(grep -oP '"id"\s*:\s*"\K[0-9a-f-]+' "$XRAY_DIR/config.json" | head -1)
         [[ -z "$UUID" ]] && die "Не удалось извлечь UUID из существующего конфига $XRAY_DIR/config.json"
         info "Используем существующий UUID: $UUID"
+
+        PRIVATE_KEY=$(grep -oP '"privateKey"\s*:\s*"\K[^"]+' "$XRAY_DIR/config.json" | head -1)
+        SHORT_ID=$(grep -oP '"shortIds"\s*:\s*\["",\s*"\K[^"]+' "$XRAY_DIR/config.json" | head -1)
     else
         UUID=$(xray uuid)
         info "Сгенерирован новый UUID: $UUID"
+
+        PRIVATE_KEY=""
+        SHORT_ID=""
+    fi
+
+    # Генерация REALITY-ключей (если ещё нет)
+    if [[ -z "${PRIVATE_KEY:-}" ]]; then
+        local key_pair
+        key_pair=$(xray x25519)
+        PRIVATE_KEY=$(echo "$key_pair" | grep -oP 'Private key:\s*\K\S+')
+        PUBLIC_KEY=$(echo "$key_pair" | grep -oP 'Public key:\s*\K\S+')
+        info "Сгенерированы REALITY-ключи"
+    else
+        # Восстанавливаем публичный ключ из приватного
+        PUBLIC_KEY=$(xray x25519 -i "$PRIVATE_KEY" | grep -oP 'Public key:\s*\K\S+')
+        info "Используем существующие REALITY-ключи"
+    fi
+
+    if [[ -z "${SHORT_ID:-}" ]]; then
+        SHORT_ID=$(openssl rand -hex 8)
+        info "Сгенерирован Short ID: $SHORT_ID"
+    else
+        info "Используем существующий Short ID: $SHORT_ID"
     fi
     render_template "$TEMPLATES_DIR/xray-config.json" "$XRAY_DIR/config.json"
     chmod 600 "$XRAY_DIR/config.json"
@@ -295,12 +326,14 @@ print_summary() {
     echo -e "${GREEN}  Установка завершена успешно${NC}"
     echo -e "${GREEN}========================================${NC}"
     echo ""
-    echo -e "  UUID клиента: ${CYAN}$UUID${NC}"
+    echo -e "  UUID клиента:  ${CYAN}$UUID${NC}"
+    echo -e "  Public Key:    ${CYAN}$PUBLIC_KEY${NC}"
+    echo -e "  Short ID:      ${CYAN}$SHORT_ID${NC}"
     echo ""
-    echo -e "  Строка подключения:"
+    echo -e "  Строка подключения (REALITY):"
     local encoded_domain
     encoded_domain=$(printf '%s' "$DOMAIN" | sed 's/ /%20/g; s/#/%23/g; s/&/%26/g')
-    echo -e "  ${CYAN}vless://$UUID@$DOMAIN:443?security=tls&encryption=none&flow=xtls-rprx-vision&type=tcp#$encoded_domain${NC}"
+    echo -e "  ${CYAN}vless://$UUID@$DOMAIN:443?security=reality&encryption=none&flow=xtls-rprx-vision&type=tcp&sni=$encoded_domain&fp=firefox&pbk=$PUBLIC_KEY&sid=$SHORT_ID#$encoded_domain${NC}"
     echo ""
 }
 
