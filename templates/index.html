@@ -1,0 +1,812 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Sign In</title>
+  <style>
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    :root {
+      --bg:        #f0eff0;
+      --surface:   #ffffff;
+      --border:    #dddcde;
+      --text:      #1a1a1a;
+      --muted:     #8a8a8a;
+      --accent:    #2563eb;
+      --accent-h:  #1d4ed8;
+      --radius:    8px;
+      --shadow:    0 1px 3px rgba(0,0,0,0.08), 0 4px 16px rgba(0,0,0,0.06);
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI',
+                   'Helvetica Neue', Arial, sans-serif;
+      color: var(--text);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    body {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 1.5rem;
+    }
+
+    /* ── Background pattern ──────────────────────────────── */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        radial-gradient(circle at 1px 1px, var(--border) 1px, transparent 0);
+      background-size: 28px 28px;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* ── Card ────────────────────────────────────────────── */
+    .card {
+      position: relative;
+      z-index: 1;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      width: 100%;
+      max-width: 360px;
+      padding: 2.5rem 2rem 2rem;
+    }
+
+    /* ── Logo mark ───────────────────────────────────────── */
+    .logo {
+      display: flex;
+      justify-content: center;
+      margin-bottom: 1.75rem;
+    }
+
+    /* ── Heading ─────────────────────────────────────────── */
+    .card h1 {
+      font-size: 1.1rem;
+      font-weight: 600;
+      text-align: center;
+      margin-bottom: 0.3rem;
+      letter-spacing: -0.01em;
+    }
+
+    .card p {
+      font-size: 0.8125rem;
+      color: var(--muted);
+      text-align: center;
+      margin-bottom: 1.75rem;
+    }
+
+    /* ── Form ────────────────────────────────────────────── */
+    .field {
+      margin-bottom: 0.875rem;
+    }
+
+    .field label {
+      display: block;
+      font-size: 0.75rem;
+      font-weight: 500;
+      color: var(--muted);
+      margin-bottom: 0.35rem;
+      letter-spacing: 0.01em;
+    }
+
+    .field input {
+      width: 100%;
+      height: 40px;
+      padding: 0 0.75rem;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-family: inherit;
+      font-size: 0.9rem;
+      color: var(--text);
+      background: #fafafa;
+      outline: none;
+      transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
+    }
+
+    .field input::placeholder {
+      color: #c0bfc1;
+    }
+
+    .field input:focus {
+      border-color: var(--accent);
+      background: #fff;
+      box-shadow: 0 0 0 3px rgba(37,99,235,0.1);
+    }
+
+    /* ── Button ──────────────────────────────────────────── */
+    .btn {
+      width: 100%;
+      height: 40px;
+      margin-top: 0.5rem;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      font-family: inherit;
+      font-size: 0.875rem;
+      font-weight: 500;
+      cursor: pointer;
+      letter-spacing: 0.01em;
+      transition: background 0.15s, transform 0.1s, box-shadow 0.15s;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .btn:hover {
+      background: var(--accent-h);
+      box-shadow: 0 2px 8px rgba(37,99,235,0.3);
+    }
+
+    .btn:active {
+      transform: scale(0.99);
+    }
+
+    .btn.loading .btn-text {
+      opacity: 0;
+    }
+
+    .btn.loading::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      margin: auto;
+      width: 16px;
+      height: 16px;
+      border: 2px solid rgba(255,255,255,0.35);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.65s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* ── Error ───────────────────────────────────────────── */
+    .error {
+      display: none;
+      align-items: center;
+      gap: 0.4rem;
+      font-size: 0.775rem;
+      color: #dc2626;
+      margin-top: 0.75rem;
+    }
+
+    .error.show {
+      display: flex;
+    }
+
+    /* ── Shake ───────────────────────────────────────────── */
+    @keyframes shake {
+      0%,100% { transform: translateX(0); }
+      20%,60%  { transform: translateX(-4px); }
+      40%,80%  { transform: translateX(4px); }
+    }
+
+    /* ── Divider ─────────────────────────────────────────── */
+    .divider {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      margin: 1.5rem 0 0;
+      font-size: 0.72rem;
+      color: var(--border);
+    }
+
+    .divider::before,
+    .divider::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
+
+    /* ── Footer ──────────────────────────────────────────── */
+    .footer {
+      margin-top: 1.25rem;
+      font-size: 0.75rem;
+      color: var(--muted);
+      text-align: center;
+      line-height: 1.5;
+    }
+
+    /* ── Decorative SVG corners ──────────────────────────── */
+    .deco {
+      position: fixed;
+      pointer-events: none;
+      z-index: 0;
+      opacity: 0.45;
+    }
+
+    .deco-tl { top: -40px;    left: -40px; }
+    .deco-br { bottom: -40px; right: -40px; transform: rotate(180deg); }
+    .deco-tr { top: -40px;    right: -40px; transform: scaleX(-1); }
+    .deco-bl { bottom: -40px; left: -40px;  transform: rotate(180deg) scaleX(-1); }
+
+    /* ── Extended theming ────────────────────────────────── */
+    :root {
+      --transition-fast:   0.12s ease;
+      --transition-base:   0.18s ease;
+      --transition-slow:   0.28s ease;
+      --shadow-sm:         0 1px 2px rgba(0,0,0,0.06);
+      --shadow-md:         0 4px 12px rgba(0,0,0,0.08);
+      --shadow-lg:         0 8px 28px rgba(0,0,0,0.1);
+      --shadow-focus-blue: 0 0 0 3px rgba(37,99,235,0.12);
+      --font-mono:         'SF Mono', 'Fira Code', 'Consolas', monospace;
+      --z-deco:    0;
+      --z-card:    1;
+      --z-overlay: 10;
+    }
+
+    /* Card entrance */
+    .card {
+      animation: card-in 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
+    }
+
+    @keyframes card-in {
+      from { opacity: 0; transform: translateY(12px) scale(0.985); }
+      to   { opacity: 1; transform: translateY(0)    scale(1); }
+    }
+
+    /* Staggered field reveal */
+    .card h1      { animation: fade-up 0.4s 0.05s both; }
+    .card > p     { animation: fade-up 0.4s 0.09s both; }
+    .field:nth-child(4) { animation: fade-up 0.4s 0.13s both; }
+    .field:nth-child(5) { animation: fade-up 0.4s 0.17s both; }
+    .btn          { animation: fade-up 0.4s 0.21s both; }
+    .divider      { animation: fade-up 0.4s 0.25s both; }
+    .footer       { animation: fade-up 0.4s 0.29s both; }
+
+    @keyframes fade-up {
+      from { opacity: 0; transform: translateY(8px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Input autofill override */
+    .field input:-webkit-autofill,
+    .field input:-webkit-autofill:focus {
+      -webkit-box-shadow: 0 0 0 40px #fff inset;
+      -webkit-text-fill-color: var(--text);
+    }
+
+    /* Button hover shimmer */
+    .btn::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(105deg,
+        transparent 40%,
+        rgba(255,255,255,0.12) 50%,
+        transparent 60%);
+      transform: translateX(-100%);
+      transition: transform 0.45s ease;
+    }
+
+    .btn:hover::before {
+      transform: translateX(100%);
+    }
+
+    /* Focus-visible ring */
+    .btn:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
+
+    .field input:focus-visible {
+      outline: none;
+    }
+
+    /* Password field icon spacing handled by input padding */
+    .field input[type=password] {
+      letter-spacing: 0.1em;
+    }
+
+    .field input[type=password]::placeholder {
+      letter-spacing: 0;
+    }
+
+    /* Card subtle top accent line */
+    .card::before {
+      content: '';
+      display: block;
+      height: 3px;
+      background: linear-gradient(90deg, var(--accent) 0%, #7c3aed 100%);
+      border-radius: 8px 8px 0 0;
+      margin: -2.5rem -2rem 2rem;
+    }
+
+    /* Error field state */
+    .field input.err {
+      border-color: #dc2626;
+      box-shadow: 0 0 0 3px rgba(220,38,38,0.1);
+    }
+
+    /* Dot grid background — color tint on hover zones */
+    @media (hover: hover) {
+      body::before {
+        transition: opacity 0.3s;
+      }
+    }
+
+    /* Responsive */
+    @media (max-width: 480px) {
+      .card {
+        padding: 2rem 1.5rem 1.75rem;
+        border-radius: 10px;
+      }
+
+      .deco-tr,
+      .deco-bl {
+        display: none;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        transition-duration: 0.01ms !important;
+      }
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg:      #111113;
+        --surface: #1c1c1f;
+        --border:  #2e2e32;
+        --text:    #f0f0f0;
+        --muted:   #888;
+        --accent:  #3b82f6;
+        --accent-h:#2563eb;
+      }
+
+      body::before {
+        background-image:
+          radial-gradient(circle at 1px 1px, rgba(255,255,255,0.06) 1px, transparent 0);
+      }
+
+      .field input {
+        background: #18181b;
+        color: var(--text);
+      }
+
+      .field input:-webkit-autofill,
+      .field input:-webkit-autofill:focus {
+        -webkit-box-shadow: 0 0 0 40px #18181b inset;
+        -webkit-text-fill-color: var(--text);
+      }
+
+      .deco { opacity: 0.2; }
+    }
+
+    @media print {
+      body { background: white; }
+      .deco, body::before { display: none; }
+      .card { box-shadow: none; border: 1px solid #ccc; }
+    }
+
+
+    /* ── Animated decorations ────────────────────────────── */
+    @keyframes slow-rotate {
+      from { transform: translate(-50%, -50%) rotate(0deg); }
+      to   { transform: translate(-50%, -50%) rotate(360deg); }
+    }
+
+    @keyframes pulse-ring {
+      0%, 100% { opacity: 0.06; }
+      50%       { opacity: 0.1; }
+    }
+
+    @keyframes float-dot {
+      0%, 100% { transform: translateY(0); }
+      50%       { transform: translateY(-6px); }
+    }
+
+    /* Slow rotation on central SVG */
+    body > svg:nth-of-type(5) {
+      animation: slow-rotate 120s linear infinite;
+    }
+
+    /* Pulse on corner rings */
+    .deco-tl { animation: pulse-ring 8s ease-in-out infinite; }
+    .deco-br { animation: pulse-ring 8s ease-in-out infinite 4s; }
+
+    /* Floating dots */
+    body > svg:nth-of-type(8),
+    body > svg:nth-of-type(9) {
+      animation: float-dot 12s ease-in-out infinite;
+    }
+
+    /* ── Input label transition ──────────────────────────── */
+    .field {
+      position: relative;
+    }
+
+    /* ── Card box decoration ─────────────────────────────── */
+    .card::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: var(--radius);
+      background: linear-gradient(135deg,
+        rgba(37,99,235,0.02) 0%,
+        transparent 50%,
+        rgba(124,58,237,0.02) 100%);
+      pointer-events: none;
+    }
+
+    /* ── Scrollbar ───────────────────────────────────────── */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb {
+      background: var(--border);
+      border-radius: 3px;
+    }
+
+    /* ── Selection ───────────────────────────────────────── */
+    ::selection {
+      background: rgba(37,99,235,0.15);
+      color: var(--text);
+    }
+
+    /* ── Logo hover ──────────────────────────────────────── */
+    .logo svg {
+      transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1),
+                  filter 0.2s ease;
+    }
+
+    .logo svg:hover {
+      transform: scale(1.07) rotate(-2deg);
+      filter: drop-shadow(0 4px 8px rgba(37,99,235,0.3));
+    }
+
+    /* ── Footer link ─────────────────────────────────────── */
+    .footer a {
+      transition: color 0.15s;
+    }
+
+    .footer a:hover {
+      color: var(--accent);
+    }
+
+    /* ── Grain texture overlay ───────────────────────────── */
+    body::after {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E");
+      opacity: 0.025;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* ── Keyboard shortcut badge ─────────────────────────── */
+    .kbd {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      font-family: var(--font-mono);
+      font-size: 0.65rem;
+      color: var(--muted);
+      padding: 0.1rem 0.3rem;
+      vertical-align: middle;
+      line-height: 1.4;
+      margin-left: 0.2rem;
+    }
+
+
+    /* ── Extended design tokens ──────────────────────────── */
+    :root {
+      /* Spacing scale */
+      --space-1: 0.25rem;  --space-2: 0.5rem;   --space-3: 0.75rem;
+      --space-4: 1rem;     --space-5: 1.25rem;  --space-6: 1.5rem;
+      --space-8: 2rem;     --space-10: 2.5rem;  --space-12: 3rem;
+      --space-16: 4rem;    --space-20: 5rem;    --space-24: 6rem;
+
+      /* Type scale */
+      --text-xs:   0.6875rem;  --text-sm:  0.8125rem;
+      --text-base: 0.9375rem;  --text-md:  1rem;
+      --text-lg:   1.125rem;   --text-xl:  1.25rem;
+      --text-2xl:  1.5rem;     --text-3xl: 1.875rem;
+      --text-4xl:  2.25rem;
+
+      /* Line heights */
+      --leading-none:   1;      --leading-tight:  1.25;
+      --leading-snug:   1.375;  --leading-normal: 1.5;
+      --leading-relaxed:1.625;  --leading-loose:  2;
+
+      /* Border radii */
+      --radius-sm:   4px;  --radius-md:  8px;
+      --radius-lg:  12px;  --radius-xl: 16px;
+      --radius-full: 9999px;
+
+      /* Opacity */
+      --opacity-0:    0;     --opacity-5:  0.05;
+      --opacity-10:  0.1;    --opacity-20: 0.2;
+      --opacity-25:  0.25;   --opacity-50: 0.5;
+      --opacity-75:  0.75;   --opacity-90: 0.9;
+      --opacity-100: 1;
+
+      /* Duration */
+      --duration-75:  75ms;   --duration-100: 100ms;
+      --duration-150: 150ms;  --duration-200: 200ms;
+      --duration-300: 300ms;  --duration-500: 500ms;
+      --duration-700: 700ms;  --duration-1000:1000ms;
+
+      /* Easing */
+      --ease-in:      cubic-bezier(0.4, 0, 1, 1);
+      --ease-out:     cubic-bezier(0, 0, 0.2, 1);
+      --ease-in-out:  cubic-bezier(0.4, 0, 0.2, 1);
+      --ease-spring:  cubic-bezier(0.16, 1, 0.3, 1);
+      --ease-bounce:  cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+
+  </style>
+</head>
+<body>
+
+  <!-- Central background ring -->
+  <svg style="position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);pointer-events:none;z-index:0;opacity:0.06;" width="700" height="700" viewBox="0 0 700 700" fill="none">
+    <circle cx="350" cy="350" r="320" stroke="#2563eb" stroke-width="1"/>
+    <circle cx="350" cy="350" r="260" stroke="#2563eb" stroke-width="0.7" stroke-dasharray="4 8"/>
+    <circle cx="350" cy="350" r="200" stroke="#2563eb" stroke-width="0.6" stroke-dasharray="3 9"/>
+    <circle cx="350" cy="350" r="140" stroke="#2563eb" stroke-width="0.5" stroke-dasharray="2 10"/>
+    <circle cx="350" cy="350" r="80"  stroke="#2563eb" stroke-width="0.4"/>
+    <line x1="30"  y1="350" x2="670" y2="350" stroke="#2563eb" stroke-width="0.5"/>
+    <line x1="350" y1="30"  x2="350" y2="670" stroke="#2563eb" stroke-width="0.5"/>
+    <line x1="124" y1="124" x2="576" y2="576" stroke="#2563eb" stroke-width="0.4" stroke-dasharray="3 7"/>
+    <line x1="576" y1="124" x2="124" y2="576" stroke="#2563eb" stroke-width="0.4" stroke-dasharray="3 7"/>
+    <!-- Tick marks at cardinal points -->
+    <line x1="346" y1="26"  x2="354" y2="26"  stroke="#2563eb" stroke-width="1"/>
+    <line x1="346" y1="674" x2="354" y2="674" stroke="#2563eb" stroke-width="1"/>
+    <line x1="26"  y1="346" x2="26"  y2="354" stroke="#2563eb" stroke-width="1"/>
+    <line x1="674" y1="346" x2="674" y2="354" stroke="#2563eb" stroke-width="1"/>
+    <!-- Small cross at center -->
+    <line x1="345" y1="350" x2="355" y2="350" stroke="#2563eb" stroke-width="1.2"/>
+    <line x1="350" y1="345" x2="350" y2="355" stroke="#2563eb" stroke-width="1.2"/>
+  </svg>
+
+  <!-- Floating geometric shapes -->
+  <svg style="position:fixed;top:15%;left:8%;pointer-events:none;z-index:0;opacity:0.12;" width="80" height="80" viewBox="0 0 80 80" fill="none">
+    <rect x="10" y="10" width="60" height="60" rx="4" stroke="#2563eb" stroke-width="0.8"/>
+    <rect x="22" y="22" width="36" height="36" rx="2" stroke="#2563eb" stroke-width="0.6" stroke-dasharray="3 4"/>
+    <line x1="10" y1="10" x2="70" y2="70" stroke="#2563eb" stroke-width="0.5"/>
+    <line x1="70" y1="10" x2="10" y2="70" stroke="#2563eb" stroke-width="0.5"/>
+  </svg>
+
+  <svg style="position:fixed;bottom:18%;right:9%;pointer-events:none;z-index:0;opacity:0.12;" width="70" height="70" viewBox="0 0 70 70" fill="none">
+    <polygon points="35,5 65,55 5,55" stroke="#6b7280" stroke-width="0.8" fill="none"/>
+    <polygon points="35,18 52,48 18,48" stroke="#6b7280" stroke-width="0.5" fill="none" stroke-dasharray="2 4"/>
+    <line x1="35" y1="5" x2="35" y2="55" stroke="#6b7280" stroke-width="0.4"/>
+    <line x1="5"  y1="55" x2="65" y2="55" stroke="#6b7280" stroke-width="0.4"/>
+  </svg>
+
+  <svg style="position:fixed;top:60%;left:5%;pointer-events:none;z-index:0;opacity:0.1;" width="60" height="60" viewBox="0 0 60 60" fill="none">
+    <circle cx="30" cy="30" r="25" stroke="#2563eb" stroke-width="0.7"/>
+    <circle cx="30" cy="30" r="15" stroke="#2563eb" stroke-width="0.5" stroke-dasharray="2 4"/>
+    <circle cx="30" cy="30" r="5"  stroke="#2563eb" stroke-width="0.5"/>
+    <line x1="5"  y1="30" x2="55" y2="30" stroke="#2563eb" stroke-width="0.4"/>
+    <line x1="30" y1="5"  x2="30" y2="55" stroke="#2563eb" stroke-width="0.4"/>
+  </svg>
+
+  <svg style="position:fixed;top:25%;right:6%;pointer-events:none;z-index:0;opacity:0.1;" width="90" height="50" viewBox="0 0 90 50" fill="none">
+    <line x1="0"  y1="0"  x2="90" y2="0"  stroke="#6b7280" stroke-width="0.5"/>
+    <line x1="0"  y1="10" x2="90" y2="10" stroke="#6b7280" stroke-width="0.4" stroke-dasharray="3 5"/>
+    <line x1="0"  y1="20" x2="90" y2="20" stroke="#6b7280" stroke-width="0.4" stroke-dasharray="3 5"/>
+    <line x1="0"  y1="30" x2="90" y2="30" stroke="#6b7280" stroke-width="0.4" stroke-dasharray="3 5"/>
+    <line x1="0"  y1="40" x2="90" y2="40" stroke="#6b7280" stroke-width="0.4" stroke-dasharray="3 5"/>
+    <line x1="0"  y1="50" x2="90" y2="50" stroke="#6b7280" stroke-width="0.5"/>
+    <line x1="0"  y1="0"  x2="0"  y2="50" stroke="#6b7280" stroke-width="0.5"/>
+    <line x1="45" y1="0"  x2="45" y2="50" stroke="#6b7280" stroke-width="0.4" stroke-dasharray="2 4"/>
+    <line x1="90" y1="0"  x2="90" y2="50" stroke="#6b7280" stroke-width="0.5"/>
+  </svg>
+
+  <!-- Decorative corner SVGs -->
+  <svg class="deco deco-tl" width="320" height="320" viewBox="0 0 320 320" fill="none">
+    <circle cx="0"   cy="0"   r="240" stroke="#2563eb" stroke-width="0.6" stroke-dasharray="4 6"/>
+    <circle cx="0"   cy="0"   r="180" stroke="#2563eb" stroke-width="0.4" stroke-dasharray="3 8"/>
+    <circle cx="0"   cy="0"   r="120" stroke="#2563eb" stroke-width="0.3" stroke-dasharray="2 10"/>
+    <circle cx="0"   cy="0"   r="60"  stroke="#2563eb" stroke-width="0.3"/>
+    <line x1="0" y1="0" x2="320" y2="0"   stroke="#2563eb" stroke-width="0.4"/>
+    <line x1="0" y1="0" x2="0"   y2="320" stroke="#2563eb" stroke-width="0.4"/>
+    <line x1="0" y1="0" x2="226" y2="226" stroke="#2563eb" stroke-width="0.3" stroke-dasharray="3 5"/>
+  </svg>
+
+  <svg class="deco deco-br" width="320" height="320" viewBox="0 0 320 320" fill="none">
+    <circle cx="0"   cy="0"   r="240" stroke="#2563eb" stroke-width="0.6" stroke-dasharray="4 6"/>
+    <circle cx="0"   cy="0"   r="180" stroke="#2563eb" stroke-width="0.4" stroke-dasharray="3 8"/>
+    <circle cx="0"   cy="0"   r="120" stroke="#2563eb" stroke-width="0.3" stroke-dasharray="2 10"/>
+    <circle cx="0"   cy="0"   r="60"  stroke="#2563eb" stroke-width="0.3"/>
+    <line x1="0" y1="0" x2="320" y2="0"   stroke="#2563eb" stroke-width="0.4"/>
+    <line x1="0" y1="0" x2="0"   y2="320" stroke="#2563eb" stroke-width="0.4"/>
+    <line x1="0" y1="0" x2="226" y2="226" stroke="#2563eb" stroke-width="0.3" stroke-dasharray="3 5"/>
+  </svg>
+
+  <svg class="deco deco-tr" width="260" height="260" viewBox="0 0 260 260" fill="none">
+    <circle cx="260" cy="0" r="200" stroke="#6b7280" stroke-width="0.5" stroke-dasharray="2 8"/>
+    <circle cx="260" cy="0" r="130" stroke="#6b7280" stroke-width="0.4" stroke-dasharray="2 8"/>
+    <circle cx="260" cy="0" r="65"  stroke="#6b7280" stroke-width="0.3"/>
+  </svg>
+
+  <svg class="deco deco-bl" width="260" height="260" viewBox="0 0 260 260" fill="none">
+    <circle cx="260" cy="0" r="200" stroke="#6b7280" stroke-width="0.5" stroke-dasharray="2 8"/>
+    <circle cx="260" cy="0" r="130" stroke="#6b7280" stroke-width="0.4" stroke-dasharray="2 8"/>
+    <circle cx="260" cy="0" r="65"  stroke="#6b7280" stroke-width="0.3"/>
+  </svg>
+
+
+  <!-- Top-center arc -->
+  <svg style="position:fixed;top:-60px;left:50%;transform:translateX(-50%);pointer-events:none;z-index:0;opacity:0.08;" width="500" height="200" viewBox="0 0 500 200" fill="none">
+    <path d="M0 200 Q250 -80 500 200" stroke="#2563eb" stroke-width="0.8" fill="none"/>
+    <path d="M40 200 Q250 -30 460 200" stroke="#2563eb" stroke-width="0.6" fill="none" stroke-dasharray="3 6"/>
+    <path d="M80 200 Q250 20 420 200"  stroke="#2563eb" stroke-width="0.5" fill="none" stroke-dasharray="2 8"/>
+    <line x1="250" y1="0" x2="250" y2="200" stroke="#2563eb" stroke-width="0.5" stroke-dasharray="3 5"/>
+    <circle cx="250" cy="0" r="3" fill="#2563eb" opacity="0.4"/>
+  </svg>
+
+  <!-- Bottom-center arc -->
+  <svg style="position:fixed;bottom:-60px;left:50%;transform:translateX(-50%) rotate(180deg);pointer-events:none;z-index:0;opacity:0.06;" width="500" height="200" viewBox="0 0 500 200" fill="none">
+    <path d="M0 200 Q250 -80 500 200" stroke="#6b7280" stroke-width="0.7" fill="none"/>
+    <path d="M60 200 Q250 -20 440 200" stroke="#6b7280" stroke-width="0.5" fill="none" stroke-dasharray="3 6"/>
+  </svg>
+
+  <!-- Scattered dots pattern — left side -->
+  <svg style="position:fixed;left:0;top:0;width:200px;height:100vh;pointer-events:none;z-index:0;opacity:0.18;" viewBox="0 0 200 800" preserveAspectRatio="xMidYMid slice" fill="none">
+    <circle cx="20"  cy="80"  r="1.5" fill="#2563eb"/>
+    <circle cx="60"  cy="140" r="1"   fill="#2563eb"/>
+    <circle cx="100" cy="60"  r="1.5" fill="#6b7280"/>
+    <circle cx="140" cy="180" r="1"   fill="#2563eb"/>
+    <circle cx="30"  cy="260" r="2"   fill="#6b7280"/>
+    <circle cx="80"  cy="320" r="1"   fill="#2563eb"/>
+    <circle cx="160" cy="280" r="1.5" fill="#2563eb"/>
+    <circle cx="50"  cy="400" r="1"   fill="#6b7280"/>
+    <circle cx="120" cy="440" r="2"   fill="#2563eb"/>
+    <circle cx="20"  cy="500" r="1"   fill="#2563eb"/>
+    <circle cx="170" cy="520" r="1.5" fill="#6b7280"/>
+    <circle cx="70"  cy="580" r="1"   fill="#2563eb"/>
+    <circle cx="130" cy="640" r="2"   fill="#2563eb"/>
+    <circle cx="40"  cy="700" r="1.5" fill="#6b7280"/>
+    <circle cx="100" cy="760" r="1"   fill="#2563eb"/>
+  </svg>
+
+  <!-- Scattered dots pattern — right side -->
+  <svg style="position:fixed;right:0;top:0;width:200px;height:100vh;pointer-events:none;z-index:0;opacity:0.18;" viewBox="0 0 200 800" preserveAspectRatio="xMidYMid slice" fill="none">
+    <circle cx="180" cy="100" r="1.5" fill="#2563eb"/>
+    <circle cx="140" cy="160" r="1"   fill="#6b7280"/>
+    <circle cx="100" cy="80"  r="2"   fill="#2563eb"/>
+    <circle cx="60"  cy="200" r="1"   fill="#2563eb"/>
+    <circle cx="170" cy="300" r="1.5" fill="#6b7280"/>
+    <circle cx="120" cy="360" r="1"   fill="#2563eb"/>
+    <circle cx="40"  cy="320" r="2"   fill="#2563eb"/>
+    <circle cx="150" cy="420" r="1"   fill="#6b7280"/>
+    <circle cx="80"  cy="480" r="1.5" fill="#2563eb"/>
+    <circle cx="180" cy="540" r="1"   fill="#2563eb"/>
+    <circle cx="30"  cy="600" r="2"   fill="#6b7280"/>
+    <circle cx="110" cy="660" r="1"   fill="#2563eb"/>
+    <circle cx="160" cy="720" r="1.5" fill="#2563eb"/>
+    <circle cx="60"  cy="780" r="1"   fill="#6b7280"/>
+  </svg>
+
+  <!-- Login card -->
+  <div class="card">
+
+    <!-- Logo -->
+    <div class="logo">
+      <svg width="36" height="36" viewBox="0 0 36 36" fill="none">
+        <rect width="36" height="36" rx="9" fill="#2563eb"/>
+        <path d="M10 26V10h6.5a5.5 5.5 0 010 11H10M22 10h4v16h-4" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </div>
+
+    <h1>Welcome back</h1>
+    <p>Sign in to continue</p>
+
+    <div class="field">
+      <label for="email">Email</label>
+      <input type="email" id="email" placeholder="name@company.com" autocomplete="email">
+    </div>
+
+    <div class="field">
+      <label for="password">Password</label>
+      <input type="password" id="password" placeholder="••••••••" autocomplete="current-password">
+    </div>
+
+    <button class="btn" id="btn">
+      <span class="btn-text">Sign in</span>
+    </button>
+
+    <div class="error" id="err">
+      <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+        <circle cx="6.5" cy="6.5" r="6" stroke="currentColor"/>
+        <path d="M6.5 3.5v3M6.5 8.5v.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+      </svg>
+      Invalid email or password.
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="footer">
+      &copy; 2026 &nbsp;·&nbsp; <a href="#" style="color:inherit;text-decoration:none;">Privacy</a>
+    </div>
+  </div>
+
+  <script>
+    var btn  = document.getElementById('btn');
+    var err  = document.getElementById('err');
+    var eml  = document.getElementById('email');
+    var pwd  = document.getElementById('password');
+
+    function attempt(ev) {
+      err.classList.remove('show');
+      if (!eml.value || !pwd.value) return;
+
+      btn.classList.add('loading');
+      btn.disabled = true;
+
+      setTimeout(function () {
+        btn.classList.remove('loading');
+        btn.disabled = false;
+        pwd.value = '';
+        err.classList.add('show');
+        pwd.style.animation = 'none';
+        pwd.offsetHeight;
+        pwd.style.animation = 'shake 0.3s ease';
+        pwd.focus();
+      }, 1200);
+    }
+
+    btn.addEventListener('click', attempt);
+    [eml, pwd].forEach(function (el) {
+      el.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') attempt(e);
+      });
+    });
+  </script>
+
+  <!-- Bottom decorative ruler -->
+  <svg style="position:fixed;bottom:1.5rem;left:50%;transform:translateX(-50%);pointer-events:none;z-index:0;opacity:0.15;" width="320" height="20" viewBox="0 0 320 20" fill="none">
+    <line x1="0" y1="10" x2="320" y2="10" stroke="#6b7280" stroke-width="0.6"/>
+    <line x1="0"   y1="4"  x2="0"   y2="16" stroke="#6b7280" stroke-width="0.8"/>
+    <line x1="40"  y1="7"  x2="40"  y2="13" stroke="#6b7280" stroke-width="0.6"/>
+    <line x1="80"  y1="5"  x2="80"  y2="15" stroke="#6b7280" stroke-width="0.7"/>
+    <line x1="120" y1="7"  x2="120" y2="13" stroke="#6b7280" stroke-width="0.6"/>
+    <line x1="160" y1="4"  x2="160" y2="16" stroke="#6b7280" stroke-width="0.8"/>
+    <line x1="200" y1="7"  x2="200" y2="13" stroke="#6b7280" stroke-width="0.6"/>
+    <line x1="240" y1="5"  x2="240" y2="15" stroke="#6b7280" stroke-width="0.7"/>
+    <line x1="280" y1="7"  x2="280" y2="13" stroke="#6b7280" stroke-width="0.6"/>
+    <line x1="320" y1="4"  x2="320" y2="16" stroke="#6b7280" stroke-width="0.8"/>
+    <!-- Small ticks -->
+    <line x1="20"  y1="8" x2="20"  y2="12" stroke="#6b7280" stroke-width="0.4"/>
+    <line x1="60"  y1="8" x2="60"  y2="12" stroke="#6b7280" stroke-width="0.4"/>
+    <line x1="100" y1="8" x2="100" y2="12" stroke="#6b7280" stroke-width="0.4"/>
+    <line x1="140" y1="8" x2="140" y2="12" stroke="#6b7280" stroke-width="0.4"/>
+    <line x1="180" y1="8" x2="180" y2="12" stroke="#6b7280" stroke-width="0.4"/>
+    <line x1="220" y1="8" x2="220" y2="12" stroke="#6b7280" stroke-width="0.4"/>
+    <line x1="260" y1="8" x2="260" y2="12" stroke="#6b7280" stroke-width="0.4"/>
+    <line x1="300" y1="8" x2="300" y2="12" stroke="#6b7280" stroke-width="0.4"/>
+  </svg>
+
+<noscript>
+  <style>.btn{opacity:.5;pointer-events:none;}</style>
+  <div style="position:fixed;bottom:1rem;left:50%;transform:translateX(-50%);background:#1a1a1a;color:#fff;font-size:.8rem;padding:.5rem 1rem;border-radius:5px;z-index:99;font-family:sans-serif;">
+    JavaScript required to sign in
+  </div>
+</noscript>
+</body>
+</html>                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             -->

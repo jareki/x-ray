@@ -1,0 +1,343 @@
+#!/bin/bash
+
+set -euo pipefail
+
+# НАСТРОЙКИ
+DOMAIN="your-domain.com"
+EMAIL="your@email.com"
+CADDY_PORT="9443"
+CERT_RENEW_DAYS="14"
+
+# ПУТИ
+ACME_HOME="/root/.acme.sh"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+TEMPLATES_DIR="$SCRIPT_DIR/templates"
+STUB_DIR="/var/www/stub"
+CERT_DIR="/etc/ssl/xray"
+XRAY_DIR="/etc/xray"
+CADDYFILE="/etc/caddy/Caddyfile"
+LOG_DIR_XRAY="/var/log/xray"
+LOG_DIR_CADDY="/var/log/caddy"
+CERT_RENEW_SCRIPT="$XRAY_DIR/cert-renew.sh"
+CERT_CHECK_SCRIPT="$XRAY_DIR/cert-check.sh"
+
+# функции вывода информации
+RED='\033[0;31m'; GREEN='\033[0;32m'; CYAN='\033[0;36m'; YELLOW='\033[0;33m'; NC='\033[0m'
+info()    { echo -e "${CYAN}[INFO]${NC} $*"; }
+success() { echo -e "${GREEN}[OK]${NC}   $*"; }
+warn()    { echo -e "${YELLOW}[WARN]${NC} $*"; }
+error()   { echo -e "${RED}[ERR]${NC}  $*"; }
+die()     { error "$*"; exit 1; }
+
+# Подставляет {{ПЕРЕМЕННАЯ}} в шаблоне и записывает результат в файл
+render_template() {
+    local src="$1" dst="$2"
+    sed \
+        -e "s|{{DOMAIN}}|$DOMAIN|g" \
+        -e "s|{{EMAIL}}|$EMAIL|g" \
+        -e "s|{{CADDY_PORT}}|$CADDY_PORT|g" \
+        -e "s|{{CERT_RENEW_DAYS}}|$CERT_RENEW_DAYS|g" \
+        -e "s|{{STUB_DIR}}|$STUB_DIR|g" \
+        -e "s|{{CERT_DIR}}|$CERT_DIR|g" \
+        -e "s|{{XRAY_DIR}}|$XRAY_DIR|g" \
+        -e "s|{{LOG_DIR_XRAY}}|$LOG_DIR_XRAY|g" \
+        -e "s|{{LOG_DIR_CADDY}}|$LOG_DIR_CADDY|g" \
+        -e "s|{{CERT_RENEW_SCRIPT}}|$CERT_RENEW_SCRIPT|g" \
+        -e "s|{{CERT_CHECK_SCRIPT}}|$CERT_CHECK_SCRIPT|g" \
+        -e "s|{{ACME_HOME}}|$ACME_HOME|g" \
+        -e "s|{{UUID}}|$UUID|g" \
+        "$src" > "$dst"
+}
+
+# проверка прав запуска
+require_root() {
+    [[ "$EUID" -eq 0 ]] || die "Запустите скрипт от root: sudo $0"
+}
+
+# проверка что настройки заполнены
+validate_settings() {
+    info "Проверка настроек..."
+    [[ "$DOMAIN" == "your-domain.com" ]] && die "Задайте DOMAIN в начале setup.sh"
+    [[ "$EMAIL"  == "your@email.com"  ]] && die "Задайте EMAIL в начале setup.sh"
+    [[ "$DOMAIN" =~ \. ]]               || die "DOMAIN выглядит некорректно: $DOMAIN"
+    success "Настройки корректны"
+}
+
+# Установка системных пакетов
+install_packages() {
+    info "Обновление списка пакетов..."
+    apt-get update -qq
+
+    local pkgs=(curl wget openssl cron ufw fail2ban logrotate)
+    local to_install=()
+    for pkg in "${pkgs[@]}"; do
+        if ! dpkg -s "$pkg" &>/dev/null; then
+            to_install+=("$pkg")
+        fi
+    done
+
+    if [[ ${#to_install[@]} -gt 0 ]]; then
+        info "Установка пакетов: ${to_install[*]}..."
+        apt-get install -y "${to_install[@]}"
+        success "Пакеты установлены"
+    else
+        success "Все системные пакеты уже установлены"
+    fi
+}
+
+# Установка Xray
+install_xray() {
+    if command -v xray &>/dev/null; then
+        success "Xray уже установлен: $(xray version | head -1)"
+        return
+    fi
+    info "Установка Xray..."
+    bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install
+    command -v xray &>/dev/null || die "Не удалось установить Xray"
+    success "Xray установлен: $(xray version | head -1)"
+}
+
+# Установка Caddy
+install_caddy() {
+    if command -v caddy &>/dev/null; then
+        success "Caddy уже установлен: $(caddy version)"
+        return
+    fi
+    info "Установка Caddy..."
+    apt-get install -y debian-keyring debian-archive-keyring apt-transport-https
+
+    curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' \
+        | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+
+    curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' \
+        | tee /etc/apt/sources.list.d/caddy-stable.list
+
+    chmod o+r /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+    chmod o+r /etc/apt/sources.list.d/caddy-stable.list
+
+    apt-get update -qq
+    apt-get install -y caddy
+    command -v caddy &>/dev/null || die "Не удалось установить Caddy"
+    success "Caddy установлен: $(caddy version)"
+}
+
+# Установка acme.sh
+install_acme() {
+    if [[ -f "$ACME_HOME/acme.sh" ]]; then
+        success "acme.sh уже установлен"
+        return
+    fi
+    info "Установка acme.sh..."
+    curl https://get.acme.sh | sh -s email="$EMAIL"
+    [[ -f "$ACME_HOME/acme.sh" ]] || die "Не удалось установить acme.sh (ожидался $ACME_HOME/acme.sh)"
+    success "acme.sh установлен"
+}
+
+# Установка всех зависимостей
+install_dependencies() {
+    info "Проверка и установка зависимостей..."
+    [[ -d "$TEMPLATES_DIR" ]] || die "Папка templates не найдена ($TEMPLATES_DIR)"
+    install_packages
+    install_xray
+    install_caddy
+    install_acme
+    success "Все зависимости готовы"
+}
+
+# Настройка firewall (ufw)
+setup_ufw() {
+    info "Настройка ufw..."
+    ufw default deny incoming  2>/dev/null || true
+    ufw default allow outgoing 2>/dev/null || true
+    # SSH — чтобы не потерять доступ
+    ufw allow 22/tcp   2>/dev/null || true
+    # HTTP — для выпуска/обновления сертификата
+    ufw allow 80/tcp   2>/dev/null || true
+    # HTTPS — основной порт Xray
+    ufw allow 443/tcp  2>/dev/null || true
+    # Включаем ufw без интерактивного подтверждения
+    echo "y" | ufw enable 2>/dev/null || true
+    success "ufw настроен (22, 80, 443)"
+}
+
+# Проверка DNS — домен должен резолвиться до выпуска сертификата
+check_dns() {
+    info "Проверка DNS для $DOMAIN..."
+    local domain_ip
+    domain_ip=$(getent hosts "$DOMAIN" 2>/dev/null | awk '{print $1}' | head -1) || true
+    [[ -z "$domain_ip" ]] && die "DNS: домен $DOMAIN не разрешается. Проверьте A-запись и повторите."
+    success "DNS OK: $DOMAIN → $domain_ip"
+}
+
+# Выпуск сертификата
+issue_certificate() {
+    info "Выпуск сертификата для $DOMAIN..."
+
+    # Останавливаем сервисы, которые могут занимать порт 80/443
+    systemctl stop caddy 2>/dev/null || true
+    systemctl stop xray  2>/dev/null || true
+
+    if "$ACME_HOME/acme.sh" --list | grep -q "$DOMAIN"; then
+        info "Сертификат уже существует — перевыпускаем принудительно"
+        "$ACME_HOME/acme.sh" --issue --standalone -d "$DOMAIN" --httpport 80 --force
+    else
+        "$ACME_HOME/acme.sh" --issue --standalone -d "$DOMAIN" --httpport 80
+    fi
+
+    mkdir -p "$CERT_DIR"
+    "$ACME_HOME/acme.sh" --install-cert -d "$DOMAIN" \
+        --cert-file      "$CERT_DIR/cert.pem" \
+        --key-file       "$CERT_DIR/key.pem" \
+        --fullchain-file "$CERT_DIR/fullchain.pem" \
+        --reloadcmd      "systemctl restart xray"
+
+    chmod 600 "$CERT_DIR"/*.pem
+    success "Сертификат установлен в $CERT_DIR"
+}
+
+# Подготовка скриптов обновления сертификата
+write_cert_scripts() {
+    info "Запись скриптов обновления сертификата..."
+    render_template "$TEMPLATES_DIR/cert-renew.sh" "$CERT_RENEW_SCRIPT"
+    render_template "$TEMPLATES_DIR/cert-check.sh" "$CERT_CHECK_SCRIPT"
+    chmod +x "$CERT_RENEW_SCRIPT" "$CERT_CHECK_SCRIPT"
+    success "Скрипты обновления записаны"
+}
+
+# Создание cron-задачи обновления сертификата
+write_cron() {
+    info "Настройка cron..."
+    render_template "$TEMPLATES_DIR/xray-cert.cron" "/etc/cron.d/xray-cert"
+    # cron игнорирует файлы без прав 644, принадлежащие не root
+    chmod 644 /etc/cron.d/xray-cert
+    success "Cron задача записана"
+}
+
+# Настройка Caddy
+write_caddyfile() {
+    info "Запись $CADDYFILE..."
+    render_template "$TEMPLATES_DIR/Caddyfile" "$CADDYFILE"
+    success "Записан $CADDYFILE"
+}
+
+# Настройка Xray — UUID сохраняется при повторном запуске
+write_xray_config() {
+    info "Генерация конфига Xray..."
+    if [[ -f "$XRAY_DIR/config.json" ]]; then
+        UUID=$(grep -oP '"id"\s*:\s*"\K[0-9a-f-]+' "$XRAY_DIR/config.json" | head -1)
+        [[ -z "$UUID" ]] && die "Не удалось извлечь UUID из существующего конфига $XRAY_DIR/config.json"
+        info "Используем существующий UUID: $UUID"
+    else
+        UUID=$(xray uuid)
+        info "Сгенерирован новый UUID: $UUID"
+    fi
+    render_template "$TEMPLATES_DIR/xray-config.json" "$XRAY_DIR/config.json"
+    chmod 600 "$XRAY_DIR/config.json"
+    success "Конфиг Xray записан (UUID: $UUID)"
+}
+
+# Копирование сайта-заглушки (если в STUB_DIR нет index.html)
+write_stub_site() {
+    if [[ ! -f "$STUB_DIR/index.html" ]]; then
+        info "Копируем сайт-заглушку из шаблонов в $STUB_DIR..."
+        cp "$TEMPLATES_DIR/index.html" "$STUB_DIR/index.html"
+        success "index.html скопирован в $STUB_DIR"
+    else
+        info "Сайт-заглушка уже существует в $STUB_DIR — пропускаем"
+    fi
+}
+
+# Настройка fail2ban
+write_fail2ban() {
+    info "Настройка fail2ban..."
+    cp "$TEMPLATES_DIR/jail.local" /etc/fail2ban/jail.local
+    chmod 644 /etc/fail2ban/jail.local
+    systemctl enable --now fail2ban 2>/dev/null || true
+    systemctl restart fail2ban 2>/dev/null || true
+    success "fail2ban настроен"
+}
+
+# Настройка logrotate для логов Xray
+write_logrotate() {
+    info "Настройка logrotate для Xray..."
+    render_template "$TEMPLATES_DIR/xray.logrotate" "/etc/logrotate.d/xray"
+    chmod 644 /etc/logrotate.d/xray
+    success "logrotate конфиг записан"
+}
+
+# systemd override — Xray автоматически перезапускается при падении
+write_systemd_override() {
+    info "Настройка systemd override для xray..."
+    mkdir -p /etc/systemd/system/xray.service.d
+    cat > /etc/systemd/system/xray.service.d/override.conf <<'EOF'
+[Service]
+Restart=always
+RestartSec=5
+EOF
+    systemctl daemon-reload
+    success "systemd override записан"
+}
+
+# Рестарт Сервисов
+restart_services() {
+    for svc in caddy xray; do
+        info "Перезапуск $svc..."
+        systemctl stop "$svc" 2>/dev/null || true
+        systemctl enable --now "$svc"
+        success "$svc запущен"
+    done
+}
+
+# Вывод итоговой информации
+print_summary() {
+    echo ""
+    echo -e "${GREEN}========================================${NC}"
+    echo -e "${GREEN}  Установка завершена успешно${NC}"
+    echo -e "${GREEN}========================================${NC}"
+    echo ""
+    echo -e "  UUID клиента: ${CYAN}$UUID${NC}"
+    echo ""
+    echo -e "  Строка подключения:"
+    local encoded_domain
+    encoded_domain=$(printf '%s' "$DOMAIN" | sed 's/ /%20/g; s/#/%23/g; s/&/%26/g')
+    echo -e "  ${CYAN}vless://$UUID@$DOMAIN:443?security=tls&encryption=none&flow=xtls-rprx-vision&type=tcp#$encoded_domain${NC}"
+    echo ""
+}
+
+# запуск setup.sh
+main() {
+    require_root
+    validate_settings
+    install_dependencies
+    setup_ufw
+    check_dns
+
+    # Проверка что порты 80 и 443 свободны (или заняты нашими сервисами)
+    for port in 80 443; do
+        local pid
+        pid=$(ss -tlnp "sport = :$port" 2>/dev/null | grep -oP 'pid=\K[0-9]+' | head -1) || true
+        if [[ -n "$pid" ]]; then
+            local pname
+            pname=$(ps -p "$pid" -o comm= 2>/dev/null) || pname="unknown"
+            if [[ "$pname" != "xray" && "$pname" != "caddy" ]]; then
+                die "Порт $port занят процессом $pname (PID $pid). Остановите его перед установкой."
+            fi
+        fi
+    done
+
+    mkdir -p "$XRAY_DIR" "$CERT_DIR" "$LOG_DIR_XRAY" "$LOG_DIR_CADDY" "$STUB_DIR"
+
+    issue_certificate
+    write_cert_scripts
+    write_cron
+    write_stub_site
+    write_caddyfile
+    write_xray_config
+    write_logrotate
+    write_fail2ban
+    write_systemd_override
+    restart_services
+    print_summary
+}
+
+main "$@"

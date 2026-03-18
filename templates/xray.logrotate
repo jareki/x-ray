@@ -1,0 +1,10 @@
+{{LOG_DIR_XRAY}}/*.log {
+    daily
+    rotate 14
+    compress
+    delaycompress
+    missingok
+    notifempty
+    # copytruncate безопасно ротирует файл пока Xray держит дескриптор
+    copytruncate
+}

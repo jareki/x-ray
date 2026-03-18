@@ -1,0 +1,82 @@
+{
+  "log": {
+    "loglevel": "warning",
+    "access": "{{LOG_DIR_XRAY}}/access.log",
+    "error": "{{LOG_DIR_XRAY}}/error.log"
+  },
+  "dns": {
+    "servers": ["1.1.1.1", "8.8.8.8"]
+  },
+  "inbounds": [
+    {
+      "port": 443,
+      "protocol": "vless",
+      "settings": {
+        "clients": [
+          {
+            "id": "{{UUID}}",
+            "flow": "xtls-rprx-vision",
+            "email": "user@{{DOMAIN}}"
+          }
+        ],
+        "decryption": "none",
+        "fallbacks": [
+          {
+            "dest": {{CADDY_PORT}}
+          }
+        ]
+      },
+      "streamSettings": {
+        "network": "raw",
+        "security": "reality",
+        "realitySettings": {
+          "show": false,
+          "target": "{{CADDY_PORT}}",
+          "serverNames": ["{{DOMAIN}}", "www.{{DOMAIN}}"],
+          "privateKey": "{{PRIVATE_KEY}}",
+          "shortIds": ["", "{{SHORT_ID}}"],          
+          "fingerprint": "firefox",
+          "serverName": "{{DOMAIN}}",
+          "password": "{{PUBLIC_KEY}}",
+          "shortId": "{{SHORT_ID}}"
+        }
+      },
+      "sniffing": {
+        "enabled": true,
+        "destOverride": ["http", "tls"],
+        "routeOnly": true
+      }
+    }
+  ],
+  "outbounds": [
+    {
+      "protocol": "freedom",
+      "tag": "direct",
+      "settings": { "domainStrategy": "UseIPv4v6" }
+    },
+    {
+      "protocol": "blackhole",
+      "tag": "block"
+    }
+  ],
+  "routing": {
+    "domainStrategy": "IPIfNonMatch",
+    "rules": [
+      {
+        "type": "field",
+        "ip": ["geoip:private", "geoip:ru"],
+        "outboundTag": "block"
+      },
+      {
+        "type": "field",
+        "protocol": ["bittorrent"],
+        "outboundTag": "block"
+      },
+      {
+        "type": "field",
+        "network": "tcp,udp",
+        "outboundTag": "direct"
+      }
+    ]
+  }
+}

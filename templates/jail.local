@@ -1,0 +1,24 @@
+[DEFAULT]
+# Бан на 1 час
+bantime  = 3600
+# Окно наблюдения — 10 минут
+findtime = 600
+# Максимум попыток перед баном
+maxretry = 5
+backend  = systemd
+
+[sshd]
+enabled  = true
+port     = 22
+filter   = sshd
+maxretry = 3
+bantime  = 86400
+
+# Повторные нарушители: если IP банился 3+ раза — бан на 2 недели
+[recidive]
+enabled  = true
+filter   = recidive
+logpath  = /var/log/fail2ban.log
+maxretry = 3
+findtime = 604800
+bantime  = 1209600
