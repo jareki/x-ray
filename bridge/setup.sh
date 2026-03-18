@@ -10,9 +10,7 @@ set -euo pipefail
 BRIDGE_ADDRESS="your-bridge-ip-or-domain"
 
 # SNI-сайт для маскировки REALITY (реальный внешний сайт с TLS 1.3 и H2)
-# Рекомендуемые: www.microsoft.com, www.google.com, dl.google.com,
-#                www.samsung.com, www.apple.com, www.mozilla.org
-REALITY_SNI="www.microsoft.com"
+REALITY_SNI="www.ya.ru"
 
 # ------------------------------------------
 #  Данные заграничного VPS (из вывода setup.sh на foreign VPS)
