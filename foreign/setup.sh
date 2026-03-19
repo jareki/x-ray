@@ -346,12 +346,12 @@ write_caddyfile() {
 write_xray_config() {
     info "Генерация конфига Xray..."
     if [[ -f "$XRAY_DIR/config.json" ]]; then
-        UUID=$(grep -oP '"id"\s*:\s*"\K[0-9a-f-]+' "$XRAY_DIR/config.json" | head -1)
+        UUID=$(sed -n 's/.*"id"\s*:\s*"\([0-9a-f-]\+\)".*/\1/p' "$XRAY_DIR/config.json" | head -1)
         [[ -z "$UUID" ]] && die "Не удалось извлечь UUID из существующего конфига $XRAY_DIR/config.json"
         info "Используем существующий UUID: $UUID"
 
-        PRIVATE_KEY=$(grep -oP '"privateKey"\s*:\s*"\K[^"]+' "$XRAY_DIR/config.json" | head -1)
-        SHORT_ID=$(grep -oP '"shortIds"\s*:\s*\["",\s*"\K[^"]+' "$XRAY_DIR/config.json" | head -1)
+        PRIVATE_KEY=$(sed -n 's/.*"privateKey"\s*:\s*"\([^"]\+\)".*/\1/p' "$XRAY_DIR/config.json" | head -1)
+        SHORT_ID=$(sed -n 's/.*"shortIds"\s*:\s*\["",\s*"\([^"]\+\)".*/\1/p' "$XRAY_DIR/config.json" | head -1)
     else
         UUID=$(xray uuid)
         info "Сгенерирован новый UUID: $UUID"
@@ -363,13 +363,16 @@ write_xray_config() {
     # Генерация REALITY-ключей (если ещё нет)
     if [[ -z "${PRIVATE_KEY:-}" ]]; then
         local key_pair
-        key_pair=$(xray x25519)
-        PRIVATE_KEY=$(echo "$key_pair" | grep -oP 'Private key:\s*\K\S+')
-        PUBLIC_KEY=$(echo "$key_pair" | grep -oP 'Public key:\s*\K\S+')
+        key_pair=$(xray x25519 2>&1)
+        PRIVATE_KEY=$(echo "$key_pair" | awk '/Private key:/{print $NF}')
+        PUBLIC_KEY=$(echo "$key_pair" | awk '/Public key:/{print $NF}')
+        [[ -z "$PRIVATE_KEY" ]] && die "Не удалось извлечь Private key из вывода xray x25519: $key_pair"
+        [[ -z "$PUBLIC_KEY" ]]  && die "Не удалось извлечь Public key из вывода xray x25519: $key_pair"
         info "Сгенерированы REALITY-ключи"
     else
         # Восстанавливаем публичный ключ из приватного
-        PUBLIC_KEY=$(xray x25519 -i "$PRIVATE_KEY" | grep -oP 'Public key:\s*\K\S+')
+        PUBLIC_KEY=$(xray x25519 -i "$PRIVATE_KEY" 2>&1 | awk '/Public key:/{print $NF}')
+        [[ -z "$PUBLIC_KEY" ]] && die "Не удалось восстановить Public key из Private key"
         info "Используем существующие REALITY-ключи"
     fi
 
