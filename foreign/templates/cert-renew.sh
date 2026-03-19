@@ -36,6 +36,9 @@ systemctl stop caddy 2>/dev/null || true
     --fullchain-file "{{CERT_DIR}}/fullchain.pem" \
     --reloadcmd      "systemctl restart xray && systemctl restart caddy"
 
+chown root:caddy "{{CERT_DIR}}"/*.pem
+chmod 640 "{{CERT_DIR}}"/*.pem
+
 # Запускаем Caddy обратно
 systemctl start caddy 2>/dev/null || true
 

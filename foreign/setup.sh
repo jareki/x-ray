@@ -310,7 +310,10 @@ issue_certificate() {
         --fullchain-file "$CERT_DIR/fullchain.pem" \
         --reloadcmd      "systemctl restart xray && systemctl restart caddy"
 
-    chmod 600 "$CERT_DIR"/*.pem
+    chown root:caddy "$CERT_DIR"
+    chmod 750 "$CERT_DIR"
+    chown root:caddy "$CERT_DIR"/*.pem
+    chmod 640 "$CERT_DIR"/*.pem
     success "Сертификат установлен в $CERT_DIR"
 }
 
