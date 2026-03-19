@@ -364,14 +364,14 @@ write_xray_config() {
     if [[ -z "${PRIVATE_KEY:-}" ]]; then
         local key_pair
         key_pair=$(xray x25519 2>&1)
-        PRIVATE_KEY=$(echo "$key_pair" | awk '/Private key:/{print $NF}')
-        PUBLIC_KEY=$(echo "$key_pair" | awk '/Public key:/{print $NF}')
+        PRIVATE_KEY=$(echo "$key_pair" | awk '/PrivateKey:/{print $NF}')
+        PUBLIC_KEY=$(echo "$key_pair" | awk '/Password:/{print $NF}')
         [[ -z "$PRIVATE_KEY" ]] && die "Не удалось извлечь Private key из вывода xray x25519: $key_pair"
         [[ -z "$PUBLIC_KEY" ]]  && die "Не удалось извлечь Public key из вывода xray x25519: $key_pair"
         info "Сгенерированы REALITY-ключи"
     else
         # Восстанавливаем публичный ключ из приватного
-        PUBLIC_KEY=$(xray x25519 -i "$PRIVATE_KEY" 2>&1 | awk '/Public key:/{print $NF}')
+        PUBLIC_KEY=$(xray x25519 -i "$PRIVATE_KEY" 2>&1 | awk '/Password:/{print $NF}')
         [[ -z "$PUBLIC_KEY" ]] && die "Не удалось восстановить Public key из Private key"
         info "Используем существующие REALITY-ключи"
     fi
