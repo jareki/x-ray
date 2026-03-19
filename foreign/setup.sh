@@ -31,6 +31,93 @@ warn()    { echo -e "${YELLOW}[WARN]${NC} $*"; }
 error()   { echo -e "${RED}[ERR]${NC}  $*"; }
 die()     { error "$*"; exit 1; }
 
+# ─── Система тегов ───
+# Все доступные теги и их описания
+declare -A TAG_DESC=(
+    [deps]="Установка системных пакетов, Xray, Caddy, acme.sh"
+    [ufw]="Настройка firewall (ufw)"
+    [dns]="Проверка DNS-записи домена"
+    [ports]="Проверка что порты 80/443 свободны"
+    [dirs]="Создание рабочих директорий"
+    [cert]="Выпуск/обновление TLS-сертификата"
+    [xray]="Генерация конфига Xray (REALITY-ключи, UUID)"
+    [caddy]="Запись Caddyfile"
+    [cron]="Настройка cron для обновления сертификата"
+    [stub]="Копирование сайта-заглушки"
+    [fail2ban]="Настройка fail2ban"
+    [logrotate]="Настройка logrotate для логов"
+    [systemd]="Systemd override для автоперезапуска Xray"
+    [restart]="Перезапуск сервисов (caddy, xray)"
+    [summary]="Вывод итоговой информации и строки подключения"
+)
+
+# Теги, запрошенные через --tags (пусто = запускать всё)
+RUN_TAGS=()
+
+# Проверяет, нужно ли выполнять шаг с данным тегом
+should_run() {
+    local tag="$1"
+    # Если теги не указаны — запускаем всё
+    [[ ${#RUN_TAGS[@]} -eq 0 ]] && return 0
+    local t
+    for t in "${RUN_TAGS[@]}"; do
+        [[ "$t" == "$tag" ]] && return 0
+    done
+    return 1
+}
+
+# Обёртка: выполняет функцию, если её тег активен, иначе пропускает
+step() {
+    local tag="$1" fn="$2"
+    if should_run "$tag"; then
+        "$fn"
+    else
+        info "Пропуск [$tag] — ${TAG_DESC[$tag]:-$fn}"
+    fi
+}
+
+usage() {
+    echo "Использование: $0 [--tags tag1,tag2,...] [--list-tags]"
+    echo ""
+    echo "Без --tags выполняются все шаги."
+    echo ""
+    echo "Опции:"
+    echo "  --tags tag1,tag2   Выполнить только указанные шаги"
+    echo "  --list-tags        Показать доступные теги и выйти"
+    echo "  --help             Показать эту справку"
+    exit 0
+}
+
+list_tags() {
+    echo "Доступные теги:"
+    echo ""
+    # Порядок шагов в main
+    local ordered_tags=(deps ufw dns ports dirs cert xray caddy cron stub fail2ban logrotate systemd restart summary)
+    for tag in "${ordered_tags[@]}"; do
+        printf "  %-12s %s\n" "$tag" "${TAG_DESC[$tag]}"
+    done
+    exit 0
+}
+
+parse_args() {
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --tags)
+                [[ -z "${2:-}" ]] && die "--tags требует аргумент (например: --tags cert,xray,restart)"
+                IFS=',' read -ra RUN_TAGS <<< "$2"
+                # Валидация тегов
+                for t in "${RUN_TAGS[@]}"; do
+                    [[ -z "${TAG_DESC[$t]+x}" ]] && die "Неизвестный тег: $t (используйте --list-tags)"
+                done
+                shift 2
+                ;;
+            --list-tags) list_tags ;;
+            --help|-h)   usage ;;
+            *)           die "Неизвестный аргумент: $1 (используйте --help)" ;;
+        esac
+    done
+}
+
 # Подставляет {{ПЕРЕМЕННАЯ}} в шаблоне и записывает результат в файл
 render_template() {
     local src="$1" dst="$2"
@@ -176,22 +263,47 @@ check_dns() {
     success "DNS OK: $DOMAIN → $domain_ip"
 }
 
+# Проверка валидности существующего сертификата
+cert_is_valid() {
+    local cert="$CERT_DIR/fullchain.pem"
+    [[ -f "$cert" ]] || return 1
+    [[ -f "$CERT_DIR/key.pem" ]] || return 1
+
+    local expiry days_left
+    expiry=$(openssl x509 -enddate -noout -in "$cert" 2>/dev/null | sed 's/notAfter=//') || return 1
+    days_left=$(( ( $(date -d "$expiry" +%s) - $(date +%s) ) / 86400 ))
+
+    if [[ "$days_left" -gt "$CERT_RENEW_DAYS" ]]; then
+        info "Сертификат валиден ещё $days_left дней (порог: $CERT_RENEW_DAYS) — пропускаем выпуск"
+        return 0
+    fi
+    info "Сертификат истекает через $days_left дней (порог: $CERT_RENEW_DAYS) — требуется обновление"
+    return 1
+}
+
 # Выпуск сертификата
 issue_certificate() {
-    info "Выпуск сертификата для $DOMAIN..."
+    info "Проверка сертификата для $DOMAIN..."
+
+    mkdir -p "$CERT_DIR"
+
+    if cert_is_valid; then
+        success "Сертификат актуален — выпуск не требуется"
+        return
+    fi
 
     # Останавливаем сервисы, которые могут занимать порт 80/443
     systemctl stop caddy 2>/dev/null || true
     systemctl stop xray  2>/dev/null || true
 
     if "$ACME_HOME/acme.sh" --list | grep -q "$DOMAIN"; then
-        info "Сертификат уже существует — перевыпускаем принудительно"
-        "$ACME_HOME/acme.sh" --issue --standalone -d "$DOMAIN" --httpport 80 --force
+        info "Сертификат в acme.sh найден — обновляем"
+        "$ACME_HOME/acme.sh" --renew --standalone -d "$DOMAIN" --httpport 80 --force
     else
+        info "Первый выпуск сертификата..."
         "$ACME_HOME/acme.sh" --issue --standalone -d "$DOMAIN" --httpport 80
     fi
 
-    mkdir -p "$CERT_DIR"
     "$ACME_HOME/acme.sh" --install-cert -d "$DOMAIN" \
         --cert-file      "$CERT_DIR/cert.pem" \
         --key-file       "$CERT_DIR/key.pem" \
@@ -339,15 +451,8 @@ print_summary() {
     echo ""
 }
 
-# запуск setup.sh
-main() {
-    require_root
-    validate_settings
-    install_dependencies
-    setup_ufw
-    check_dns
-
-    # Проверка что порты 80 и 443 свободны (или заняты нашими сервисами)
+# Проверка что порты 80 и 443 свободны (или заняты нашими сервисами)
+check_ports() {
     for port in 80 443; do
         local pid
         pid=$(ss -tlnp "sport = :$port" 2>/dev/null | grep -oP 'pid=\K[0-9]+' | head -1) || true
@@ -359,20 +464,36 @@ main() {
             fi
         fi
     done
+    success "Порты 80 и 443 свободны"
+}
 
+# Создание рабочих директорий
+create_dirs() {
     mkdir -p "$XRAY_DIR" "$CERT_DIR" "$LOG_DIR_XRAY" "$LOG_DIR_CADDY" "$STUB_DIR"
+    success "Директории созданы"
+}
 
-    issue_certificate
-    write_cert_scripts
-    write_cron
-    write_stub_site
-    write_caddyfile
-    write_xray_config
-    write_logrotate
-    write_fail2ban
-    write_systemd_override
-    restart_services
-    print_summary
+# запуск setup.sh
+main() {
+    parse_args "$@"
+    require_root
+    validate_settings
+
+    step deps      install_dependencies
+    step ufw       setup_ufw
+    step dns       check_dns
+    step ports     check_ports
+    step dirs      create_dirs
+    step cert      issue_certificate
+    step xray      write_xray_config
+    step caddy     write_caddyfile
+    step cron      write_cron
+    step stub      write_stub_site
+    step fail2ban  write_fail2ban
+    step logrotate write_logrotate
+    step systemd   write_systemd_override
+    step restart   restart_services
+    step summary   print_summary
 }
 
 main "$@"
