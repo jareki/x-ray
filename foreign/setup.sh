@@ -16,7 +16,7 @@ TEMPLATES_DIR="$SCRIPT_DIR/templates"
 COMMON_DIR="$SCRIPT_DIR/../common"
 STUB_DIR="/var/www/stub"
 CERT_DIR="/etc/ssl/xray"
-XRAY_DIR="/etc/xray"
+XRAY_DIR="/usr/local/etc/xray"
 CADDYFILE="/etc/caddy/Caddyfile"
 LOG_DIR_XRAY="/var/log/xray"
 LOG_DIR_CADDY="/var/log/caddy"
@@ -373,7 +373,7 @@ write_xray_config() {
         # Восстанавливаем публичный ключ из приватного
         PUBLIC_KEY=$(xray x25519 -i "$PRIVATE_KEY" 2>&1 | awk '/Password:/{print $NF}')
         [[ -z "$PUBLIC_KEY" ]] && die "Не удалось восстановить Public key из Private key"
-        info "Используем существующие REALITY-ключи"
+        info "Используем существующие REALITY-ключи: PUBLIC $PUBLIC_KEY PRIVATE $PRIVATE_KEY"
     fi
 
     if [[ -z "${SHORT_ID:-}" ]]; then

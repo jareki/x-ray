@@ -27,7 +27,7 @@ FOREIGN_SNI="your-foreign-domain.com"       # SNI для подключения 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TEMPLATES_DIR="$SCRIPT_DIR/templates"
 COMMON_DIR="$SCRIPT_DIR/../common"
-XRAY_DIR="/etc/xray"
+XRAY_DIR="/usr/local/etc/xray"
 LOG_DIR_XRAY="/var/log/xray"
 
 # функции вывода информации
