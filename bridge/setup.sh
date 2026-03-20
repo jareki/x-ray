@@ -38,6 +38,90 @@ warn()    { echo -e "${YELLOW}[WARN]${NC} $*"; }
 error()   { echo -e "${RED}[ERR]${NC}  $*"; }
 die()     { error "$*"; exit 1; }
 
+# ─── Система тегов ───
+# Все доступные теги и их описания
+declare -A TAG_DESC=(
+    [deps]="Установка системных пакетов, Xray"
+    [ufw]="Настройка firewall (ufw)"
+    [sni]="Проверка доступности REALITY SNI"
+    [foreign]="Проверка связи с foreign VPS"
+    [ports]="Проверка что порт 443 свободен"
+    [dirs]="Создание рабочих директорий"
+    [xray]="Генерация конфига Xray (REALITY-ключи, UUID)"
+    [fail2ban]="Настройка fail2ban"
+    [logrotate]="Настройка logrotate для логов"
+    [systemd]="Systemd override для автоперезапуска Xray"
+    [restart]="Перезапуск сервисов (xray)"
+    [summary]="Вывод итоговой информации и строки подключения"
+)
+
+# Теги, запрошенные через --tags (пусто = запускать всё)
+RUN_TAGS=()
+
+# Проверяет, нужно ли выполнять шаг с данным тегом
+should_run() {
+    local tag="$1"
+    # Если теги не указаны — запускаем всё
+    [[ ${#RUN_TAGS[@]} -eq 0 ]] && return 0
+    local t
+    for t in "${RUN_TAGS[@]}"; do
+        [[ "$t" == "$tag" ]] && return 0
+    done
+    return 1
+}
+
+# Обёртка: выполняет функцию, если её тег активен, иначе пропускает
+step() {
+    local tag="$1" fn="$2"
+    if should_run "$tag"; then
+        "$fn"
+    else
+        info "Пропуск [$tag] — ${TAG_DESC[$tag]:-$fn}"
+    fi
+}
+
+usage() {
+    echo "Использование: $0 [--tags tag1,tag2,...] [--list-tags]"
+    echo ""
+    echo "Без --tags выполняются все шаги."
+    echo ""
+    echo "Опции:"
+    echo "  --tags tag1,tag2   Выполнить только указанные шаги"
+    echo "  --list-tags        Показать доступные теги и выйти"
+    echo "  --help             Показать эту справку"
+    exit 0
+}
+
+list_tags() {
+    echo "Доступные теги:"
+    echo ""
+    # Порядок шагов в main
+    local ordered_tags=(deps ufw sni foreign ports dirs xray fail2ban logrotate systemd restart summary)
+    for tag in "${ordered_tags[@]}"; do
+        printf "  %-12s %s\n" "$tag" "${TAG_DESC[$tag]}"
+    done
+    exit 0
+}
+
+parse_args() {
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --tags)
+                [[ -z "${2:-}" ]] && die "--tags требует аргумент (например: --tags xray,restart)"
+                IFS=',' read -ra RUN_TAGS <<< "$2"
+                # Валидация тегов
+                for t in "${RUN_TAGS[@]}"; do
+                    [[ -z "${TAG_DESC[$t]+x}" ]] && die "Неизвестный тег: $t (используйте --list-tags)"
+                done
+                shift 2
+                ;;
+            --list-tags) list_tags ;;
+            --help|-h)   usage ;;
+            *)           die "Неизвестный аргумент: $1 (используйте --help)" ;;
+        esac
+    done
+}
+
 # Подставляет {{ПЕРЕМЕННАЯ}} в шаблоне и записывает результат в файл
 render_template() {
     local src="$1" dst="$2"
@@ -115,8 +199,8 @@ install_xray() {
 # Установка всех зависимостей
 install_dependencies() {
     info "Проверка и установка зависимостей..."
-    [[ -d "$TEMPLATES_DIR" ]]        || die "Папка bridge/templates не найдена ($TEMPLATES_DIR)"
-    [[ -d "$COMMON_DIR" ]] || die "Папка common не найдена ($COMMON_DIR)"
+    [[ -d "$TEMPLATES_DIR" ]] || die "Папка bridge/templates не найдена ($TEMPLATES_DIR)"
+    [[ -d "$COMMON_DIR" ]]    || die "Папка common не найдена ($COMMON_DIR)"
     install_packages
     install_xray
     success "Все зависимости готовы"
@@ -153,16 +237,36 @@ check_foreign_connectivity() {
     fi
 }
 
+# Проверка что порт 443 свободен (или занят Xray)
+check_ports() {
+    local pid
+    pid=$(ss -tlnp "sport = :443" 2>/dev/null | grep -oP 'pid=\K[0-9]+' | head -1) || true
+    if [[ -n "$pid" ]]; then
+        local pname
+        pname=$(ps -p "$pid" -o comm= 2>/dev/null) || pname="unknown"
+        if [[ "$pname" != "xray" ]]; then
+            die "Порт 443 занят процессом $pname (PID $pid). Остановите его перед установкой."
+        fi
+    fi
+    success "Порт 443 свободен"
+}
+
+# Создание рабочих директорий
+create_dirs() {
+    mkdir -p "$XRAY_DIR" "$LOG_DIR_XRAY"
+    success "Директории созданы"
+}
+
 # Настройка Xray — bridge конфиг с маршрутизацией
 write_xray_config() {
     info "Генерация конфига Xray (bridge)..."
     if [[ -f "$XRAY_DIR/config.json" ]]; then
-        UUID=$(grep -oP '"id"\s*:\s*"\K[0-9a-f-]+' "$XRAY_DIR/config.json" | head -1)
+        UUID=$(sed -n 's/.*"id"\s*:\s*"\([0-9a-f-]\+\)".*/\1/p' "$XRAY_DIR/config.json" | head -1)
         [[ -z "$UUID" ]] && die "Не удалось извлечь UUID из существующего конфига $XRAY_DIR/config.json"
         info "Используем существующий UUID: $UUID"
 
-        PRIVATE_KEY=$(grep -oP '"privateKey"\s*:\s*"\K[^"]+' "$XRAY_DIR/config.json" | head -1)
-        SHORT_ID=$(grep -oP '"shortIds"\s*:\s*\["",\s*"\K[^"]+' "$XRAY_DIR/config.json" | head -1)
+        PRIVATE_KEY=$(sed -n 's/.*"privateKey"\s*:\s*"\([^"]\+\)".*/\1/p' "$XRAY_DIR/config.json" | head -1)
+        SHORT_ID=$(sed -n 's/.*"shortIds"\s*:\s*\["",\s*"\([^"]\+\)".*/\1/p' "$XRAY_DIR/config.json" | head -1)
     else
         UUID=$(xray uuid)
         info "Сгенерирован новый UUID: $UUID"
@@ -174,13 +278,17 @@ write_xray_config() {
     # Генерация REALITY-ключей (если ещё нет)
     if [[ -z "${PRIVATE_KEY:-}" ]]; then
         local key_pair
-        key_pair=$(xray x25519)
-        PRIVATE_KEY=$(echo "$key_pair" | grep -oP 'Private key:\s*\K\S+')
-        PUBLIC_KEY=$(echo "$key_pair" | grep -oP 'Public key:\s*\K\S+')
+        key_pair=$(xray x25519 2>&1)
+        PRIVATE_KEY=$(echo "$key_pair" | awk '/PrivateKey:/{print $NF}')
+        PUBLIC_KEY=$(echo "$key_pair" | awk '/Password:/{print $NF}')
+        [[ -z "$PRIVATE_KEY" ]] && die "Не удалось извлечь Private key из вывода xray x25519: $key_pair"
+        [[ -z "$PUBLIC_KEY" ]]  && die "Не удалось извлечь Public key из вывода xray x25519: $key_pair"
         info "Сгенерированы REALITY-ключи"
     else
-        PUBLIC_KEY=$(xray x25519 -i "$PRIVATE_KEY" | grep -oP 'Public key:\s*\K\S+')
-        info "Используем существующие REALITY-ключи"
+        # Восстанавливаем публичный ключ из приватного
+        PUBLIC_KEY=$(xray x25519 -i "$PRIVATE_KEY" 2>&1 | awk '/Password:/{print $NF}')
+        [[ -z "$PUBLIC_KEY" ]] && die "Не удалось восстановить Public key из Private key"
+        info "Используем существующие REALITY-ключи: PUBLIC $PUBLIC_KEY PRIVATE $PRIVATE_KEY"
     fi
 
     if [[ -z "${SHORT_ID:-}" ]]; then
@@ -257,32 +365,22 @@ print_summary() {
 
 # запуск
 main() {
+    parse_args "$@"
     require_root
     validate_settings
-    install_dependencies
-    setup_ufw
-    check_reality_sni
-    check_foreign_connectivity
 
-    # Проверка что порт 443 свободен (или занят Xray)
-    local pid
-    pid=$(ss -tlnp "sport = :443" 2>/dev/null | grep -oP 'pid=\K[0-9]+' | head -1) || true
-    if [[ -n "$pid" ]]; then
-        local pname
-        pname=$(ps -p "$pid" -o comm= 2>/dev/null) || pname="unknown"
-        if [[ "$pname" != "xray" ]]; then
-            die "Порт 443 занят процессом $pname (PID $pid). Остановите его перед установкой."
-        fi
-    fi
-
-    mkdir -p "$XRAY_DIR" "$LOG_DIR_XRAY"
-
-    write_xray_config
-    write_logrotate
-    write_fail2ban
-    write_systemd_override
-    restart_services
-    print_summary
+    step deps      install_dependencies
+    step ufw       setup_ufw
+    step sni       check_reality_sni
+    step foreign   check_foreign_connectivity
+    step ports     check_ports
+    step dirs      create_dirs
+    step xray      write_xray_config
+    step fail2ban  write_fail2ban
+    step logrotate write_logrotate
+    step systemd   write_systemd_override
+    step restart   restart_services
+    step summary   print_summary
 }
 
 main "$@"
