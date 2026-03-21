@@ -260,7 +260,7 @@ create_dirs() {
 # Настройка Xray — bridge конфиг с маршрутизацией
 write_xray_config() {
     info "Генерация конфига Xray (bridge)..."
-    if [[ -f "$XRAY_DIR/config.json" ]]; then
+    if [[ -f "$XRAY_DIR/config.json" ]] && grep -q '"id"' "$XRAY_DIR/config.json" 2>/dev/null; then
         UUID=$(sed -n 's/.*"id"\s*:\s*"\([0-9a-f-]\+\)".*/\1/p' "$XRAY_DIR/config.json" | head -1)
         [[ -z "$UUID" ]] && die "Не удалось извлечь UUID из существующего конфига $XRAY_DIR/config.json"
         info "Используем существующий UUID: $UUID"
@@ -299,7 +299,8 @@ write_xray_config() {
     fi
 
     render_template "$TEMPLATES_DIR/xray-config.json" "$XRAY_DIR/config.json"
-    chmod 600 "$XRAY_DIR/config.json"
+    chown root:nobody "$XRAY_DIR/config.json"
+    chmod 640 "$XRAY_DIR/config.json"
     success "Конфиг Xray (bridge) записан (UUID: $UUID)"
 }
 

@@ -7,15 +7,11 @@
   "dns": {
     "servers": [
       {
-        "address": "1.1.1.1",
-        "domains": ["geosite:geolocation-!ru"]
+        "address": "77.88.8.8",
+        "domains": ["geosite:category-ru"]
       },
-      {
-        "address": "https://dns.google/dns-query",
-        "domains": ["geosite:geolocation-!ru"]
-      },
-      "77.88.8.8",
-      "77.88.8.1"
+      "1.1.1.1",
+      "8.8.8.8"
     ]
   },
   "inbounds": [

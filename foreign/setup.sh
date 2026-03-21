@@ -383,7 +383,8 @@ write_xray_config() {
         info "Используем существующий Short ID: $SHORT_ID"
     fi
     render_template "$TEMPLATES_DIR/xray-config.json" "$XRAY_DIR/config.json"
-    chmod 600 "$XRAY_DIR/config.json"
+    chown root:nobody "$XRAY_DIR/config.json"
+    chmod 640 "$XRAY_DIR/config.json"
     success "Конфиг Xray записан (UUID: $UUID)"
 }
 
