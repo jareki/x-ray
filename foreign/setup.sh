@@ -383,8 +383,8 @@ write_xray_config() {
         info "Используем существующий Short ID: $SHORT_ID"
     fi
     render_template "$TEMPLATES_DIR/xray-config.json" "$XRAY_DIR/config.json"
-    chown root:nobody "$XRAY_DIR/config.json"
-    chmod 640 "$XRAY_DIR/config.json"
+    chown nobody:root "$XRAY_DIR/config.json"
+    chmod 644 "$XRAY_DIR/config.json"
     success "Конфиг Xray записан (UUID: $UUID)"
 }
 
@@ -477,6 +477,7 @@ check_ports() {
 # Создание рабочих директорий
 create_dirs() {
     mkdir -p "$XRAY_DIR" "$CERT_DIR" "$LOG_DIR_XRAY" "$LOG_DIR_CADDY" "$STUB_DIR"
+    chmod 755 "$XRAY_DIR"
     success "Директории созданы"
 }
 

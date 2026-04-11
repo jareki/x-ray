@@ -254,6 +254,7 @@ check_ports() {
 # Создание рабочих директорий
 create_dirs() {
     mkdir -p "$XRAY_DIR" "$LOG_DIR_XRAY"
+    chmod 755 "$XRAY_DIR"
     success "Директории созданы"
 }
 
@@ -299,8 +300,8 @@ write_xray_config() {
     fi
 
     render_template "$TEMPLATES_DIR/xray-config.json" "$XRAY_DIR/config.json"
-    chown root:nobody "$XRAY_DIR/config.json"
-    chmod 640 "$XRAY_DIR/config.json"
+    chown nobody:root "$XRAY_DIR/config.json"
+    chmod 644 "$XRAY_DIR/config.json"
     success "Конфиг Xray (bridge) записан (UUID: $UUID)"
 }
 
