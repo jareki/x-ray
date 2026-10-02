@@ -1,2 +1,0 @@
-# Проверка сертификата Xray каждый день в 03:00
-0 3 * * * root {{CERT_CHECK_SCRIPT}} >> {{LOG_DIR_XRAY}}/cert-renew.log 2>&1

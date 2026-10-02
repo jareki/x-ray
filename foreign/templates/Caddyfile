@@ -1,7 +1,14 @@
-# HTTPS — для REALITY dest (с LE-сертификатом от acme.sh)
+{
+    # e-mail для ACME-аккаунта (Let's Encrypt, при сбое — ZeroSSL)
+    email {{EMAIL}}
+    # :443 занят Xray, поэтому авто-редиректы Caddy (на https://домен:8443) не нужны —
+    # редирект с :80 описан явно ниже. Выпуск/продление сертификата это не отключает.
+    auto_https disable_redirects
+}
+
+# HTTPS — для REALITY dest. Сертификат Caddy выпускает и продлевает сам (HTTP-01 через :80)
 {{DOMAIN}}:{{CADDY_HTTPS_PORT}} {
     bind 127.0.0.1
-    tls {{CERT_DIR}}/fullchain.pem {{CERT_DIR}}/key.pem
     root * {{STUB_DIR}}
     file_server
     encode gzip zstd
@@ -22,8 +29,9 @@
     }
 }
 
-# Plain HTTP — для VLESS fallbacks (трафик уже расшифрован Xray)
-127.0.0.1:{{CADDY_HTTP_PORT}} {
+# Plain HTTP — для VLESS fallbacks (трафик уже расшифрован Xray).
+# Схема http:// обязательна: иначе Caddy поднимет на IP-адресе HTTPS с внутренним сертификатом
+http://127.0.0.1:{{CADDY_HTTP_PORT}} {
     root * {{STUB_DIR}}
     file_server
     encode gzip zstd
@@ -44,7 +52,8 @@
     }
 }
 
-# HTTP :80 — редирект на HTTPS (маскировка под обычный сайт)
+# HTTP :80 — редирект на HTTPS (маскировка под обычный сайт).
+# Здесь же Caddy автоматически отвечает на ACME HTTP-01 challenge
 http://{{DOMAIN}} {
     redir https://{{DOMAIN}}{uri} permanent
 }

@@ -1,7 +1,7 @@
 {
   "log": {
     "loglevel": "warning",
-    "access": "{{LOG_DIR_XRAY}}/access.log",
+    "access": "none",
     "error": "{{LOG_DIR_XRAY}}/error.log"
   },
   "dns": {
@@ -12,13 +12,7 @@
       "port": 443,
       "protocol": "vless",
       "settings": {
-        "clients": [
-          {
-            "id": "{{UUID}}",
-            "flow": "xtls-rprx-vision",
-            "email": "user@{{DOMAIN}}"
-          }
-        ],
+        "clients": {{CLIENTS_JSON}},
         "decryption": "none",
         "fallbacks": [
           {

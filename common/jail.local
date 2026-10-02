@@ -9,7 +9,8 @@ backend  = systemd
 
 [sshd]
 enabled  = true
-port     = 22
+# порты подставляются setup.sh из конфигурации sshd
+port     = {{SSH_PORTS}}
 filter   = sshd
 maxretry = 3
 bantime  = 86400
@@ -17,6 +18,8 @@ bantime  = 86400
 # Повторные нарушители: если IP банился 3+ раза — бан на 2 недели
 [recidive]
 enabled  = true
+# fail2ban пишет свой лог в файл, а не в journald, поэтому backend = systemd из [DEFAULT] здесь не подходит
+backend  = auto
 filter   = recidive
 logpath  = /var/log/fail2ban.log
 maxretry = 3
