@@ -210,8 +210,18 @@ sudo foreign/setup.sh
 - UUID из старого конфига переносится в `clients.txt` под именем `default`, старые ссылки продолжают работать;
 - ufw и fail2ban перенастраиваются под реальные SSH-порты. Старое правило ufw для 22,
   если SSH на другом порту, нужно удалить вручную: `ufw delete allow 22/tcp`;
-- после проверки можно удалить остатки: `/root/.acme.sh`, `/etc/ssl/xray`, `/var/log/xray/access.log`,
-  `/var/log/xray/cert-renew.log`.
+- после проверки можно удалить остатки. acme.sh удаляйте его же командой `--uninstall`, а не `rm -rf`:
+  установщик acme.sh прописал свой `acme.sh.env` в `/root/.bashrc`, и после ручного удаления
+  каталога при каждом входе будет ошибка `-bash: /root/.acme.sh/acme.sh.env: No such file or directory`.
+
+  ```bash
+  sudo /root/.acme.sh/acme.sh --uninstall      # убирает cron и строку из .bashrc
+  sudo rm -rf /root/.acme.sh /etc/ssl/xray
+  sudo rm -f /var/log/xray/access.log /var/log/xray/cert-renew.log
+  ```
+
+  Если каталог уже удалён вручную, уберите строку из `.bashrc`:
+  `sudo sed -i.bak '/acme\.sh\.env/d' /root/.bashrc`.
 
 ### Xray и geo-базы
 

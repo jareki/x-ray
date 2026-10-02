@@ -126,7 +126,7 @@ cleanup_legacy_acme() {
     if [[ -x /root/.acme.sh/acme.sh ]]; then
         # cron acme.sh в standalone-режиме конфликтует с Caddy за порт 80
         /root/.acme.sh/acme.sh --uninstall-cronjob >/dev/null 2>&1 || true
-        warn "cron acme.sh отключён. Сам /root/.acme.sh и /etc/ssl/xray больше не используются — их можно удалить вручную"
+        warn "cron acme.sh отключён. /root/.acme.sh и /etc/ssl/xray больше не используются. Удаляйте acme.sh командой /root/.acme.sh/acme.sh --uninstall (она убирает строку из /root/.bashrc), затем rm -rf /root/.acme.sh /etc/ssl/xray"
     fi
     success "Старая схема сертификатов удалена"
 }
